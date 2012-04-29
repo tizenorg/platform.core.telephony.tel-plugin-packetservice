@@ -1,0 +1,63 @@
+tel-plugin-packetservice (0.1.7) unstable; urgency=low
+
+  * Fix add profile
+  * Git: pkgs/t/tel-plugin-packetservice
+  * Tag: tel-plugin-packetservice_0.1.7
+
+ -- DongHoo Park <donghoo.park@samsung.com>  Thu, 29 Mar 2012 13:56:11 +0900
+
+tel-plugin-packetservice (0.1.6) unstable; urgency=low
+
+  * Fix prefix (TAPI_ to TCORE_)
+  * Git: pkgs/t/tel-plugin-packetservice
+  * Tag: tel-plugin-packetservice_0.1.6
+
+ -- Inho Oh <inho48.oh@samsung.com>  Tue, 27 Mar 2012 22:19:11 +0900
+
+tel-plugin-packetservice (0.1.5) unstable; urgency=low
+
+  * Fix obs build break in x86
+  * Git: pkgs/t/tel-plugin-packetservice
+  * Tag: tel-plugin-packetservice_0.1.5
+
+ -- DongHoo Park <donghoo.park@samsung.com>  Wed, 21 Mar 2012 13:01:27 +0900
+
+tel-plugin-packetservice (0.1.4) unstable; urgency=low
+
+  * Fix update cellular state
+  * Git: pkgs/t/tel-plugin-packetservice
+  * Tag: tel-plugin-packetservice_0.1.4
+
+ -- DongHoo Park <donghoo.park@samsung.com>  Mon, 19 Mar 2012 15:26:47 +0900
+
+tel-plugin-packetservice (0.1.3) unstable; urgency=low
+
+  * Fix build break
+  * Git: pkgs/t/tel-plugin-packetservice
+  * Tag: tel-plugin-packetservice_0.1.3
+
+ -- DongHoo Park <donghoo.park@samsung.com>  Sat, 17 Mar 2012 20:55:21 +0900
+
+tel-plugin-packetservice (0.1.2) unstable; urgency=low
+
+  * Fix build break in OBS and Add .spec file for OBS
+  * Git: pkgs/t/tel-plugin-packetservice
+  * Tag: tel-plugin-packetservice_0.1.2
+
+ -- DongHoo Park <donghoo.park@samsung.com>  Fri, 16 Mar 2012 23:23:22 +0900
+
+tel-plugin-packetservice (0.1.1) unstable; urgency=low
+
+  * Fix bugs
+  * Git: pkgs/t/tel-plugin-packetservice
+  * Tag: tel-plugin-packetservice_0.1.1
+
+ -- DongHoo Park <donghoo.park@samsung.com>  Fri, 16 Mar 2012 20:04:05 +0900
+
+tel-plugin-packetservice (0.1.0) unstable; urgency=low
+
+  * initialze
+  * Git: pkgs/t/tel-plugin-packetservice
+  * Tag: tel-plugin-packetservice_0.1.0
+
+ -- Inho Oh <inho48.oh@samsung.com>  Thu, 15 Mar 2012 22:37:29 +0900
