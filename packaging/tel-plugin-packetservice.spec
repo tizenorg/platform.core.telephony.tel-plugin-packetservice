@@ -6,6 +6,7 @@ Release:    1
 Group:      System/Libraries
 License:    Apache
 Source0:    tel-plugin-packetservice-%{version}.tar.gz
+Source1001: packaging/tel-plugin-packetservice.manifest 
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 BuildRequires:  cmake
@@ -22,6 +23,7 @@ Telephony Packet Service library
 %setup -q
 
 %build
+cp %{SOURCE1001} .
 cmake . -DCMAKE_INSTALL_PREFIX=%{_prefix}
 make %{?jobs:-j%jobs}
 
@@ -58,6 +60,7 @@ rm -rf %{buildroot}
 %make_install
 
 %files
+%manifest tel-plugin-packetservice.manifest
 %defattr(-,root,root,-)
 #%doc COPYING
 /tmp/dnet_db.sql
