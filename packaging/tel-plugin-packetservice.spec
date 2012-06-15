@@ -1,4 +1,3 @@
-#sbs-git:slp/pkgs/t/tel-plugin-packetservice
 Name:       tel-plugin-packetservice
 Summary:    Telephony Packet Service library
 Version: 0.1.7
@@ -7,6 +6,7 @@ Group:      System/Libraries
 License:    Apache
 Source0:    tel-plugin-packetservice-%{version}.tar.gz
 Source1001: packaging/tel-plugin-packetservice.manifest 
+Patch0:     0001-Support-sysconfdir-in-the-makefile.patch
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 BuildRequires:  cmake
@@ -21,11 +21,16 @@ Telephony Packet Service library
 
 %prep
 %setup -q
+%patch0 -p1
 
 %build
 cp %{SOURCE1001} .
-cmake . -DCMAKE_INSTALL_PREFIX=%{_prefix}
-make %{?jobs:-j%jobs}
+cmake . -DCMAKE_INSTALL_PREFIX=%{_prefix} -DSYSCONFDIR=%{_sysconfdir}
+make %{?_smp_mflags}
+
+%install
+%make_install
+
 
 %post 
 /sbin/ldconfig
@@ -55,15 +60,9 @@ fi
 
 %postun -p /sbin/ldconfig
 
-%install
-rm -rf %{buildroot}
-%make_install
-
 %files
 %manifest tel-plugin-packetservice.manifest
-%defattr(-,root,root,-)
-#%doc COPYING
 /tmp/dnet_db.sql
 /tmp/dnet_db_data.sql
-/usr/etc/dbus-1/system.d/*
+%{_sysconfdir}/dbus-1/system.d/*
 %{_libdir}/telephony/plugins/ps-plugin*
