@@ -6,7 +6,6 @@ Group:      System/Libraries
 License:    Apache
 Source0:    tel-plugin-packetservice-%{version}.tar.gz
 Source1001: packaging/tel-plugin-packetservice.manifest 
-Patch0:     0001-Support-sysconfdir-in-the-makefile.patch
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 BuildRequires:  cmake
@@ -21,7 +20,6 @@ Telephony Packet Service library
 
 %prep
 %setup -q
-%patch0 -p1
 
 %build
 cp %{SOURCE1001} .

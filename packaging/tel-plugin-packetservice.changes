@@ -1,3 +1,6 @@
+* Thu Aug 09 2012 Patrick McCarty <patrick.mccarty@linux.intel.com> d259826
+- Fix invalid user "inhouse" in ps-plugin.conf
+
 * Fri Jun 15 2012 Patrick McCarty <patrick.mccarty@linux.intel.com> - 0.1.7
 - Add a patch to support sysconfdir
 - Move dbus files from /usr/etc to /etc
