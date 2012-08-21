@@ -1,7 +1,7 @@
 #sbs-git:slp/pkgs/t/tel-plugin-packetservice
 Name:       tel-plugin-packetservice
 Summary:    Telephony Packet Service library
-Version: 0.1.7
+Version: 0.1.16
 Release:    1
 Group:      System/Libraries
 License:    Apache

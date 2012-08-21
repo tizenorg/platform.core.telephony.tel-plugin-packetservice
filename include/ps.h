@@ -59,15 +59,19 @@ gboolean    _ps_modem_set_data_roaming_allowed(gpointer modem, gboolean value);
 gboolean    _ps_modem_get_data_roaming_allowed(gpointer modem);
 gboolean    _ps_modem_get_flght_mode(gpointer object);
 gboolean    _ps_modem_get_sim_init(gpointer object);
+gboolean    _ps_modem_get_power(gpointer object);
 gchar*      _ps_modem_ref_operator(gpointer object);
 gboolean    _ps_modem_get_properties(gpointer modem, GHashTable *properties);
+GHashTable* _ps_modem_ref_services(gpointer modem);
 gchar*      _ps_modem_ref_path(gpointer modem);
 gpointer    _ps_modem_ref_plugin(gpointer modem);
+gpointer    _ps_modem_ref_dbusconn(gpointer modem);
 gpointer    _ps_modem_ref_co_modem(gpointer modem);
 
 /*SERVICE*/
 gpointer    _ps_service_create_service(DBusGConnection *conn, TcorePlugin *p,
 				gpointer modem, CoreObject *co_network, CoreObject *co_ps, gchar* path);
+gboolean    _ps_service_ref_context(gpointer object, gpointer context);
 gboolean    _ps_service_ref_contexts(gpointer service, GHashTable *contexts, gchar *operator);
 gboolean    _ps_service_unref_context(gpointer service, gpointer context);
 gboolean    _ps_service_get_properties(gpointer service, GHashTable *properties);
@@ -81,6 +85,7 @@ gboolean    _ps_service_deactivate_context(gpointer service, gpointer context);
 void        _ps_service_connection_timer(gpointer service, gpointer context);
 void        _ps_service_reset_connection_timer(gpointer context);
 void        _ps_service_connect_default_context(gpointer service);
+void        _ps_service_reset_contexts(gpointer object);
 void        _ps_service_disconnect_contexts(gpointer service);
 gboolean    _ps_service_processing_network_event(gpointer service, gboolean ps_attached, gboolean roaming);
 gboolean    _ps_service_set_connected(gpointer service, int context_id, gboolean enabled);

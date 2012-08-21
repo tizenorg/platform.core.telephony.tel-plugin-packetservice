@@ -353,9 +353,16 @@ static void __ps_modem_create_service(DBusGConnection *conn, TcorePlugin *p,
 
 	target_plg = tcore_object_ref_plugin(co_modem);
 	co_pslist = tcore_plugin_get_core_objects_bytype(target_plg, CORE_OBJECT_TYPE_PS);
-	co_networks = tcore_plugin_get_core_objects_bytype(target_plg, CORE_OBJECT_TYPE_NETWORK);
+	if (!co_pslist)
+		return;
 	co_ps = co_pslist->data;
+	g_slist_free(co_pslist);
+
+	co_networks = tcore_plugin_get_core_objects_bytype(target_plg, CORE_OBJECT_TYPE_NETWORK);
+	if (!co_networks)
+		return;
 	co_network = co_networks->data;
+	g_slist_free(co_networks);
 
 	if(!co_ps || !co_network)
 		return;
@@ -369,8 +376,6 @@ static void __ps_modem_create_service(DBusGConnection *conn, TcorePlugin *p,
 	__ps_modem_emit_service_added_signal((PsModem *) modem, object);
 
 	g_free(t_path);
-	g_slist_free(co_pslist);
-	g_slist_free(co_networks);
 
 	return;
 }
@@ -445,6 +450,9 @@ static void __ps_modem_processing_modem_event(gpointer object)
 		if(modem->flight_mode || !modem->data_allowed || !modem->roaming_allowed ){
 			_ps_service_disconnect_contexts(value);
 		}
+		else if(!modem->powered){
+			_ps_service_reset_contexts(value);
+		}
 		_ps_service_connect_default_context(value);
 	}
 
@@ -510,6 +518,8 @@ gboolean _ps_modem_processing_power_enable(gpointer object, gboolean enable)
 	__ps_modem_set_powered(modem, enable);
 	if (enable)
 		__ps_modem_create_service(modem->conn, modem->plg, modem, modem->co_modem);
+	else
+		__ps_modem_processing_modem_event(modem);
 
 	return TRUE;
 }
@@ -626,6 +636,14 @@ gboolean _ps_modem_get_sim_init(gpointer object)
 	return modem->sim_init;
 }
 
+gboolean _ps_modem_get_power(gpointer object)
+{
+	PsModem * modem = object;
+	g_return_val_if_fail(modem != NULL, FALSE);
+
+	return modem->powered;
+}
+
 gchar* _ps_modem_ref_operator(gpointer object)
 {
 	PsModem * modem = object;
@@ -653,6 +671,14 @@ gboolean _ps_modem_get_properties(gpointer object, GHashTable *properties)
 	return TRUE;
 }
 
+GHashTable* _ps_modem_ref_services(gpointer object)
+{
+	PsModem *modem = object;
+	g_return_val_if_fail(modem != NULL, NULL);
+
+	return modem->services;
+}
+
 gchar* _ps_modem_ref_path(gpointer object)
 {
 	PsModem *modem = object;
@@ -667,6 +693,14 @@ gpointer _ps_modem_ref_plugin(gpointer object)
 	g_return_val_if_fail(modem != NULL, NULL);
 
 	return modem->plg;
+}
+
+gpointer _ps_modem_ref_dbusconn(gpointer object)
+{
+	PsModem *modem = object;
+	g_return_val_if_fail(modem != NULL, NULL);
+
+	return modem->conn;
 }
 
 gpointer _ps_modem_ref_co_modem(gpointer object)

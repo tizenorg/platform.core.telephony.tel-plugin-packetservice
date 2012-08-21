@@ -387,6 +387,7 @@ static gboolean __ps_service_check_connection_option(gpointer object)
 		b_connect &=_ps_modem_get_data_roaming_allowed(service->p_modem);
 	}
 
+	b_connect &= _ps_modem_get_power(service->p_modem);
 	b_connect &= _ps_modem_get_sim_init(service->p_modem);
 	b_connect &= _ps_modem_get_data_allowed(service->p_modem);
 	b_connect &= !_ps_modem_get_flght_mode(service->p_modem);
@@ -439,6 +440,33 @@ gpointer _ps_service_create_service(DBusGConnection *conn, TcorePlugin *p, gpoin
 	msg("service(%p) register dbus path(%s)", object, path);
 
 	return object;
+}
+
+gboolean _ps_service_ref_context(gpointer object, gpointer context)
+{
+	gpointer tmp = NULL;
+	gchar *s_path = NULL;
+	PsService *service = object;
+
+	dbg("service refer to context");
+	g_return_val_if_fail(service != NULL, FALSE);
+
+	s_path = _ps_context_ref_path(context);
+	tmp = g_hash_table_lookup(service->contexts, s_path);
+	if (tmp != NULL) {
+		dbg("context(%p) already existed", tmp);
+		return FALSE;
+	}
+
+	_ps_context_set_service(context, service);
+	tcore_ps_add_context(service->co_ps, (CoreObject *) _ps_context_ref_co_context(context));
+	g_hash_table_insert(service->contexts, g_strdup(s_path), context);
+
+	dbg("context(%p) insert to hash", context);
+	__ps_service_emit_context_added_signal(service, context);
+
+	//_ps_service_connect_default_context(service);
+	return TRUE;
 }
 
 gboolean _ps_service_ref_contexts(gpointer object, GHashTable *contexts, gchar *operator)
@@ -629,6 +657,35 @@ void _ps_service_reset_connection_timer(gpointer context)
 	return;
 }
 
+void _ps_service_reset_contexts(gpointer object)
+{
+	GHashTableIter iter;
+	gpointer key, value;
+	PsService *service = object;
+
+	dbg("service disconnect all contexts");
+	g_return_if_fail(service != NULL);
+
+	g_hash_table_iter_init(&iter, service->contexts);
+	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+		int state;
+		CoreObject *context = NULL;
+
+		_ps_service_reset_connection_timer(value);
+
+		context = _ps_context_ref_co_context(value);
+		state = tcore_context_get_state(context);
+		if(state == CONTEXT_STATE_DEACTIVATED){
+			continue;
+		}
+
+		tcore_ps_clear_context_id(service->co_ps, context);
+		_ps_context_set_connected(value, FALSE);
+	}
+
+	return;
+}
+
 void _ps_service_disconnect_contexts(gpointer object)
 {
 	GHashTableIter iter;
@@ -769,6 +826,11 @@ enum telephony_ps_state _ps_service_check_cellular_state(gpointer object)
 	gboolean state = FALSE;
 	PsService *service = object;
 	g_return_val_if_fail(service != NULL, TELEPHONY_PS_NO_SERVICE);
+
+	state = _ps_modem_get_power(service->p_modem);
+	if(!state){
+		return TELEPHONY_PS_NO_SERVICE;
+	}
 
 	state = _ps_modem_get_sim_init(service->p_modem);
 	if(!state){

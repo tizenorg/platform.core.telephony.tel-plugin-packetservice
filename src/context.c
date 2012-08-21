@@ -501,7 +501,7 @@ static gboolean __ps_context_create_co_context(gpointer object, GHashTable *prop
 	path = __ps_context_create_path(profile_name, svc_ctg_id);
 
 	context = (PsContext *) object;
-	co_context = tcore_context_new(context->plg, path);
+	co_context = tcore_context_new(context->plg, path, NULL);
 	tcore_context_set_state(co_context, CONTEXT_STATE_DEACTIVATED);
 	tcore_context_set_role(co_context, svc_ctg_id);
 	tcore_context_set_apn(co_context, apn);
@@ -757,7 +757,7 @@ static int __ps_context_insert_profile_to_database(GHashTable *property, int net
 	profile_id = __ps_context_load_profile_id_from_database();
 	if(profile_id <= 0){
 		dbg("fail to get last profile id");
-		return FALSE;
+		return 0;
 	}
 	profile_id++;
 
@@ -793,9 +793,9 @@ static int __ps_context_insert_profile_to_database(GHashTable *property, int net
 	g_hash_table_destroy(in_param);
 
 	if(!rv)
-		return FALSE;
+		return 0;
 
-	return TRUE;
+	return profile_id;
 }
 
 static int __ps_context_load_network_id_from_database(gchar *mccmnc)
@@ -956,6 +956,58 @@ static gboolean __ps_context_set_alwayson_enable(gpointer object, gboolean enabl
 	return TRUE;
 }
 
+static gpointer __ps_context_add_context(gpointer modem, gchar *mccmnc, int profile_id)
+{
+	char szQuery[5000];
+	DBusGConnection *conn = NULL;
+	TcorePlugin *p = NULL;
+
+	GHashTableIter iter;
+	gpointer object = NULL;
+	gpointer key, value;
+	gchar *insert_key1 = NULL;
+	GHashTable *in_param, *out_param;
+	in_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
+	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+			(GDestroyNotify) g_hash_table_destroy);
+
+	dbg("create profile by profile id (%d)", profile_id);
+	conn = _ps_modem_ref_dbusconn(modem);
+	p = _ps_modem_ref_plugin(modem);
+
+	memset(szQuery, '\0', 5000);
+	strcpy(szQuery, "select");
+	strcat(szQuery, " a.network_info_id, a.network_name, a.mccmnc,"); //0 , 1, 2
+	strcat(szQuery, " b.profile_id, b.profile_name, b.apn, "); //3, 4, 5
+	strcat(szQuery, " b.auth_type, b.auth_id, b.auth_pwd,"); //6, 7, 8
+	strcat(szQuery, " b.proxy_ip_addr, b.home_url, b.pdp_protocol, "); //9, 10 , 11
+	strcat(szQuery, " b.linger_time, b.is_secure_connection, b.app_protocol_type, b.traffic_class,"); //12, 13, 14, 15
+	strcat(szQuery, " b.is_static_ip_addr, b.ip_addr, b.is_static_dns_addr, b.dns_addr1, b.dns_addr2, b.svc_category_id"); //16,17, 18, 19, 20, 21
+	strcat(szQuery, " from network_info a, pdp_profile b");
+	strcat(szQuery, " where b.profile_id = ? and a.network_info_id = b.network_info_id ");
+
+	insert_key1 = g_strdup_printf("%d", profile_id);
+	g_hash_table_insert(in_param, "1", g_strdup(insert_key1));
+	tcore_storage_read_query_database(strg_db, handle, szQuery, in_param, out_param, 22);
+
+	g_hash_table_iter_init(&iter, out_param);
+	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+		gchar *path = NULL;
+
+		object = __ps_context_create_context(conn, p, mccmnc, (GHashTable *) value);
+		path = _ps_context_ref_path(object);
+
+		g_hash_table_insert(contexts, g_strdup(path), object);
+		dbg("context (%p, %s) insert to hash", object, path);
+	}
+
+	g_hash_table_destroy(in_param);
+	g_hash_table_destroy(out_param);
+	g_free(insert_key1);
+
+	return object;
+}
+
 gboolean _ps_context_initialize(gpointer plugin)
 {
 	gboolean rv = TRUE;
@@ -1029,8 +1081,13 @@ GHashTable* _ps_context_ref_hashtable(void)
 
 gboolean _ps_context_add_context(gpointer modem, gchar *operator, GHashTable *property)
 {
-	gboolean rv = FALSE;
+	GHashTable *services = NULL;
+	gpointer context = NULL;
+
+	GHashTableIter iter;
+	gpointer key, value;
 	int network_id = 0;
+	int profile_id = 0;
 
 	network_id = __ps_context_get_network_id(operator);
 	if(network_id <= 0){
@@ -1038,15 +1095,24 @@ gboolean _ps_context_add_context(gpointer modem, gchar *operator, GHashTable *pr
 		return FALSE;
 	}
 
-	rv = __ps_context_insert_profile_to_database(property, network_id);
-	if(rv != TRUE){
+	profile_id = __ps_context_insert_profile_to_database(property, network_id);
+	if(profile_id <= 0){
 		dbg("fail to insert profile info to database");
 		return FALSE;
 	}
 
-	_ps_modem_set_sim_enabled(modem, FALSE);
-	g_hash_table_foreach_remove(contexts, __remove_contexts, NULL);
-	_ps_modem_processing_sim_complete(modem, TRUE, operator);
+	context = __ps_context_add_context(modem, operator, profile_id);
+	if(!context)
+		return FALSE;
+
+	services = _ps_modem_ref_services(modem);
+	if(!services)
+		return FALSE;
+
+	g_hash_table_iter_init(&iter, services);
+	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+		_ps_service_ref_context(value, context);
+	}
 
 	return TRUE;
 }

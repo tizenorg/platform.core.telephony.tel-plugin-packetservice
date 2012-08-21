@@ -217,9 +217,19 @@ gboolean _ps_get_co_modem_values(gpointer modem)
 	g_return_val_if_fail(modem != NULL, FALSE);
 
 	co_modem = _ps_modem_ref_co_modem(modem);
+	if (!co_modem)
+		return FALSE;
+
 	plg = tcore_object_ref_plugin(co_modem);
+	if (!plg)
+		return FALSE;
+
 	co_lists = tcore_plugin_get_core_objects_bytype(plg, CORE_OBJECT_TYPE_SIM);
+	if (!co_lists)
+		return FALSE;
+
 	co_sim = co_lists->data;
+	g_slist_free(co_lists);
 
 	sim_status = tcore_sim_get_status(co_sim);
 	if(sim_status == SIM_STATUS_INIT_COMPLETED)

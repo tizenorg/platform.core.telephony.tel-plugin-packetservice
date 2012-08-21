@@ -208,7 +208,7 @@ gboolean ps_iface_master_get_modems(PsMaster *master, DBusGMethodInvocation *con
 			dbus_g_method_return_error(context, error);
 			g_hash_table_destroy(properties);
 			g_hash_table_destroy(modems);
-			return FALSE;
+			return TRUE;
 		}
 
 		path = _ps_modem_ref_path(value);
@@ -239,7 +239,7 @@ gboolean ps_iface_master_get_profile_list(PsMaster *master, DBusGMethodInvocatio
 		err("no profiles");
 		g_set_error(&error, PS_ERROR, PS_ERR_NO_PROFILE, "profile does not exists");
 		dbus_g_method_return_error(context, error);
-		return FALSE;
+		return TRUE;
 	}
 
 	g_hash_table_iter_init(&iter, contexts);
@@ -318,7 +318,7 @@ gboolean ps_iface_master_reset_profile(PsMaster *master, gboolean *result, GErro
 		dbg("modem does not exist");
 		g_set_error(error, PS_ERROR, PS_ERR_INTERNAL, "fail to get modem");
 		*result = FALSE;
-		return FALSE;
+		return TRUE;
 	}
 
 	g_hash_table_iter_init(&iter, master->modems);
@@ -408,12 +408,24 @@ static void __ps_master_storage_key_callback(enum tcore_storage_key key, void *v
 	GVariant *tmp = NULL;
 	GHashTableIter iter;
 	gpointer h_key, h_value;
+	gboolean type_check = FALSE;
 	PsMaster *master = (PsMaster *)user_data;
 
 	dbg("storage key(%d) callback", key);
 	g_return_if_fail(master != NULL);
 
 	tmp = (GVariant *)value;
+	if(!tmp){
+		err("value is null");
+		return;
+	}
+
+	type_check = g_variant_is_of_type(tmp, G_VARIANT_TYPE_BOOLEAN);
+	if(!type_check){
+		err("wrong variant data type");
+		g_variant_unref(tmp);
+		return;
+	}
 
 	g_hash_table_iter_init(&iter, master->modems);
 	while (g_hash_table_iter_next(&iter, &h_key, &h_value) == TRUE) {
@@ -487,6 +499,8 @@ gboolean _ps_master_create_modems(gpointer object)
 			continue;
 
 		co_modem = modemlists->data;
+		g_slist_free(modemlists);
+
 		modem_name = g_strdup_printf("/%s", tcore_object_ref_name(co_modem));
 		tmp = g_hash_table_lookup(master->modems, modem_name);
 		if (tmp != NULL) {
@@ -506,7 +520,6 @@ gboolean _ps_master_create_modems(gpointer object)
 		__ps_master_emit_modem_added_signal(master, modem);
 
 		g_free(modem_name);
-		g_slist_free(modemlists);
 	} while ((plist = g_slist_next(plist)));
 
 	return TRUE;
