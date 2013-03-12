@@ -346,29 +346,20 @@ static void __ps_modem_create_service(DBusGConnection *conn, TcorePlugin *p,
 	gchar *t_path = NULL;
 	GObject *object = NULL;
 
-	GSList *co_pslist = NULL;
-	GSList *co_networks = NULL;
 	CoreObject *co_ps = NULL;
 	CoreObject *co_network = NULL;
 	TcorePlugin *target_plg = NULL;
 
 	target_plg = tcore_object_ref_plugin(co_modem);
-	co_pslist = tcore_plugin_get_core_objects_bytype(target_plg, CORE_OBJECT_TYPE_PS);
-	if (!co_pslist)
-		return;
-	co_ps = co_pslist->data;
-	g_slist_free(co_pslist);
-
-	co_networks = tcore_plugin_get_core_objects_bytype(target_plg, CORE_OBJECT_TYPE_NETWORK);
-	if (!co_networks)
-		return;
-	co_network = co_networks->data;
-	g_slist_free(co_networks);
-
-	if(!co_ps || !co_network)
+	co_ps = tcore_plugin_ref_core_object(target_plg, CORE_OBJECT_TYPE_PS);
+	if (!co_ps)
 		return;
 
-	t_path = g_strdup_printf("%s_%s", _ps_modem_ref_path(modem), tcore_object_ref_name(co_ps));
+	co_network = tcore_plugin_ref_core_object(target_plg, CORE_OBJECT_TYPE_NETWORK);
+	if (!co_network)
+		return;
+
+	t_path = g_strdup_printf("%s_ps", _ps_modem_ref_path(modem));
 	dbg("service path (%s)", t_path);
 	object = _ps_service_create_service(conn,p, modem, co_network, co_ps, t_path);
 

@@ -498,19 +498,14 @@ gboolean _ps_master_create_modems(gpointer object)
 	for (; plist != NULL; plist = g_slist_next(plist)) {
 		TcorePlugin *p = NULL;
 		CoreObject *co_modem = NULL;
-		GSList *modemlists = NULL;
 		gchar *modem_name = NULL;
 
 		p = plist->data;
-		modemlists = tcore_plugin_get_core_objects_bytype(p, CORE_OBJECT_TYPE_MODEM);
-		dbg("plug-in %p, modemlists(%p)", p, modemlists);
-		if (!modemlists)
+		co_modem = tcore_plugin_ref_core_object(p, CORE_OBJECT_TYPE_MODEM);
+		if (!co_modem)
 			continue;
 
-		co_modem = modemlists->data;
-		g_slist_free(modemlists);
-
-		modem_name = g_strdup_printf("/%s", tcore_object_ref_name(co_modem));
+		modem_name = g_strdup_printf("/%s", tcore_server_get_cp_name_by_plugin(p));
 		tmp = g_hash_table_lookup(master->modems, modem_name);
 		if (tmp != NULL) {
 			dbg("modem (%p) already existed", tmp);

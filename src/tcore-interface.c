@@ -40,20 +40,20 @@ static enum tcore_hook_return __on_hook_call_status(Server *s, CoreObject *sourc
 	g_return_val_if_fail(service != NULL, TCORE_HOOK_RETURN_STOP_PROPAGATION);
 
 	cstatus = (struct tnoti_ps_call_status *) data;
-	dbg("call status event cid(%d) state(%d) reason(%d)",
-			cstatus->context_id, cstatus->state, cstatus->result);
+	dbg("call status event cid(%d) state(%d)",
+			cstatus->context_id, cstatus->state);
 
 	//send activation event / deactivation event
-	if (cstatus->state == 0) {/* OK: PDP define is complete. */
+	if (cstatus->state == PS_DATA_CALL_CTX_DEFINED) {/* OK: PDP define is complete. */
 		dbg("service is ready to activate");
 		_ps_service_set_ps_defined(service, TRUE, cstatus->context_id);
 		//_ps_service_connect_default_context(service);
 	}
-	else if (cstatus->state == 1) {/* CONNECTED */
+	else if (cstatus->state == PS_DATA_CALL_CONNECTED) {/* CONNECTED */
 		dbg("service is activated");
 		_ps_service_set_connected(service, cstatus->context_id, TRUE);
 	}
-	else if (cstatus->state == 3) { /* NO CARRIER */
+	else if (cstatus->state == PS_DATA_CALL_NOT_CONNECTED) { /* NO CARRIER */
 		dbg("service is deactivated");
 		_ps_service_set_ps_defined(service, FALSE, cstatus->context_id);
 		_ps_service_set_connected(service, cstatus->context_id, FALSE);
@@ -216,7 +216,6 @@ gboolean _ps_get_co_modem_values(gpointer modem)
 	CoreObject *co_modem = NULL;
 	CoreObject *co_sim = NULL;
 
-	GSList *co_lists = NULL;
 	gboolean sim_init = FALSE, modem_powered = FALSE, flight_mode = FALSE;
 	int sim_status = 0;
 	struct tel_sim_imsi *sim_imsi = NULL;
@@ -231,12 +230,9 @@ gboolean _ps_get_co_modem_values(gpointer modem)
 	if (!plg)
 		return FALSE;
 
-	co_lists = tcore_plugin_get_core_objects_bytype(plg, CORE_OBJECT_TYPE_SIM);
-	if (!co_lists)
+	co_sim = tcore_plugin_ref_core_object(plg, CORE_OBJECT_TYPE_SIM);
+	if (!co_sim)
 		return FALSE;
-
-	co_sim = co_lists->data;
-	g_slist_free(co_lists);
 
 	sim_status = tcore_sim_get_status(co_sim);
 	if(sim_status == SIM_STATUS_INIT_COMPLETED)

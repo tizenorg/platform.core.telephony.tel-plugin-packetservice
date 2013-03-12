@@ -590,7 +590,7 @@ static gboolean __ps_context_create_co_context(gpointer object, GHashTable *prop
 	path = __ps_context_create_path(profile_name, profile_id, svc_ctg_id);
 
 	context = (PsContext *) object;
-	co_context = tcore_context_new(context->plg, path, NULL);
+	co_context = tcore_context_new(context->plg, NULL);
 	tcore_context_set_state(co_context, CONTEXT_STATE_DEACTIVATED);
 	tcore_context_set_role(co_context, svc_ctg_id);
 	tcore_context_set_apn(co_context, apn);
