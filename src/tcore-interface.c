@@ -29,6 +29,8 @@
 #include <co_sim.h>
 #include <co_network.h>
 
+#include <util.h>
+
 static enum tcore_hook_return __on_hook_call_status(Server *s, CoreObject *source,
 		enum tcore_notification_command command, unsigned int data_len, void *data,
 		void *user_data)
