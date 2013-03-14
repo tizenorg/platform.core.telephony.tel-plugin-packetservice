@@ -35,6 +35,10 @@ static enum tcore_hook_return __on_hook_call_status(Server *s, CoreObject *sourc
 {
 	gpointer service = user_data;
 	struct tnoti_ps_call_status *cstatus = NULL;
+	char *ifname;
+	gboolean netif_updown = FALSE;
+	GSList *contexts;
+	CoreObject *co_context;
 
 	dbg("call status event");
 	g_return_val_if_fail(service != NULL, TCORE_HOOK_RETURN_STOP_PROPAGATION);
@@ -43,6 +47,30 @@ static enum tcore_hook_return __on_hook_call_status(Server *s, CoreObject *sourc
 	dbg("call status event cid(%d) state(%d)",
 			cstatus->context_id, cstatus->state);
 
+	if (cstatus->state == PS_DATA_CALL_CTX_DEFINED)
+		goto out;
+	else if (cstatus->state == PS_DATA_CALL_CONNECTED)
+		netif_updown = TRUE;
+	else if (cstatus->state == PS_DATA_CALL_NOT_CONNECTED)
+		netif_updown = FALSE;
+
+	contexts = tcore_ps_ref_context_by_id(source, cstatus->context_id);
+	for (; contexts != NULL; contexts = g_slist_next(contexts)) {
+		co_context = contexts->data;
+		ifname = tcore_context_get_ipv4_devname(co_context);
+
+		if (ifname == NULL)
+			continue;
+
+		if (tcore_util_netif(ifname, netif_updown)
+					!= TCORE_RETURN_SUCCESS) {
+			g_slist_free(contexts);
+			g_free(ifname);
+			dbg("tcore_util_netif() failed.");
+		}
+	}
+
+out:
 	//send activation event / deactivation event
 	if (cstatus->state == PS_DATA_CALL_CTX_DEFINED) {/* OK: PDP define is complete. */
 		dbg("service is ready to activate");
