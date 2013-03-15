@@ -1,18 +1,11 @@
 #sbs-git:slp/pkgs/t/tel-plugin-packetservice
 Name:       tel-plugin-packetservice
 Summary:    Telephony Packet Service library
-Version: 0.1.36
+Version: 0.1.34
 Release:    1
 Group:      System/Libraries
 License:    Apache
 Source0:    tel-plugin-packetservice-%{version}.tar.gz
-%ifarch %ix86
-%if "%{simulator}" != "1"
-patch0: 0001-main-Create-modems-only-when-one-modem-is-added.patch
-patch1: 0002-dnet_db_data-Change-SFR-internet-APN-and-add-Bouygue.patch
-patch2: 0003-context-Fix-context-creation-issue.patch
-%endif
-%endif
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 BuildRequires:  cmake
@@ -27,13 +20,6 @@ Telephony Packet Service library
 
 %prep
 %setup -q
-%ifarch %ix86
-%if "%{simulator}" != "1"
-%patch0 -p1
-%patch1 -p1
-%patch2 -p1
-%endif
-%endif
 
 %build
 cmake . -DCMAKE_INSTALL_PREFIX=%{_prefix} -DSYSCONFDIR=%{_sysconfdir}
