@@ -278,25 +278,29 @@ gboolean ps_iface_context_activate(PsContext *pscontext, DBusGMethodInvocation *
 	int context_state = 0;
 	GError *error = NULL;
 
-	dbg("activate context(%s)", _ps_context_ref_path(pscontext));
+	dbg("Activate context - Path: [%s]", _ps_context_ref_path(pscontext));
 
-	/*support always on connection*/
+	/* Support Always ON connection */
 	_ps_context_set_alwayson_enable(pscontext, TRUE);
+
+	/* Reset connection timer */
 	_ps_service_reset_connection_timer(pscontext);
 
+	/* Service Activate context */
 	rv = _ps_service_activate_context(pscontext->p_service, pscontext);
 	if (rv != TCORE_RETURN_SUCCESS) {
-		dbg("fail to activate context connection");
+		err("Context Activation - FAIL");
 		g_set_error(&error, PS_ERROR, PS_ERR_TRASPORT, "fail to activate context err(%d)", rv);
 		goto FAIL;
 	}
+	dbg("Context Activation - SUCCESS");
 
-	dbg("success to activate context");
 	dbus_g_method_return(context, pscontext->path);
 
+	/* Get context State, Set connected if it is already Activated */
 	context_state = tcore_context_get_state(pscontext->co_context);
 	if (context_state == CONTEXT_STATE_ACTIVATED) {
-		dbg("context is already connected");
+		dbg("Conetxt State - Already connected");
 		_ps_context_set_connected(pscontext, TRUE);
 	}
 
@@ -535,6 +539,8 @@ static gboolean __ps_context_create_co_context(gpointer object, GHashTable *prop
 	int auth_type = 0,svc_ctg_id = 0;
 	gboolean hidden = FALSE, editable = FALSE, default_conn = FALSE;
 
+	dbg("Create context");
+
 	g_hash_table_iter_init(&iter, (GHashTable *) property);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 		if (g_str_equal(key, "3") == TRUE) { /*Profile ID*/
@@ -608,6 +614,15 @@ static gboolean __ps_context_create_co_context(gpointer object, GHashTable *prop
 	context->path = g_strdup(path);
 	context->co_context = co_context;
 
+	msg("	Profile ID: [%d]", context->profile_id);
+	msg("	Profile Hidden: [%d]", (context->hidden ? "YES" : "NO"));
+	msg("	Profile Editable: [%d]", (context->editable ? "YES" : "NO"));
+	msg("	Profile - Default Internet: [%s]",
+			(context->default_internet ? "YES" : "NO"));
+	msg("	Path: [%s]", context->path);
+	msg("	Context: [0x%x]", context->co_context);
+
+	/* Free memory */
 	g_free(path);
 	return TRUE;
 }
@@ -1481,7 +1496,7 @@ GHashTable* _ps_context_create_hashtable(DBusGConnection *conn, TcorePlugin *p, 
 	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
 			(GDestroyNotify) g_hash_table_destroy);
 
-	dbg("create profile by mccmnc (%s)", mccmnc);
+	dbg("Create profile by mccmnc: [%s]", mccmnc);
 
 	memset(szQuery, '\0', 5000);
 	strcpy(szQuery, "select");
@@ -1495,6 +1510,8 @@ GHashTable* _ps_context_create_hashtable(DBusGConnection *conn, TcorePlugin *p, 
 	strcat(szQuery, " where a.mccmnc= ? and a.network_info_id = b.network_info_id ");
 
 	g_hash_table_insert(in_param, "1", g_strdup(mccmnc));
+	dbg("Inserted mccmnc to Hash Table");
+
 	tcore_storage_read_query_database(strg_db, handle, szQuery, in_param, out_param, 23);
 
 	g_hash_table_iter_init(&iter, out_param);
@@ -1506,7 +1523,7 @@ GHashTable* _ps_context_create_hashtable(DBusGConnection *conn, TcorePlugin *p, 
 		path = _ps_context_ref_path(object);
 
 		g_hash_table_insert(contexts, g_strdup(path), object);
-		dbg("context (%p, %s) insert to hash", object, path);
+		dbg("Inserted to Hash Table - context: [%p] Path: [%s]", object, path);
 	}
 
 	g_hash_table_destroy(in_param);
@@ -1593,10 +1610,16 @@ gboolean _ps_context_set_alwayson_enable(gpointer object, gboolean enabled)
 {
 	PsContext *context = object;
 	int role = CONTEXT_ROLE_UNKNOWN;
+
+	dbg("Set Always ON: [%s]", (enabled ? "YES" : "NO"));
+
 	g_return_val_if_fail(context != NULL, FALSE);
 
 	role = tcore_context_get_role(context->co_context);
-	if(role == CONTEXT_ROLE_INTERNET && context->default_internet){
+	dbg("Role: [%d] Default Internet: [%s]",
+		role, (context->default_internet ? "YES" : "NO"));
+	if(role == CONTEXT_ROLE_INTERNET && context->default_internet) {
+		dbg("Setting Always ON: [%s]", (enabled ? "YES" : "NO"));
 		context->alwayson = enabled;
 	}
 
@@ -1620,6 +1643,9 @@ gboolean _ps_context_get_default_internet(gpointer object)
 gboolean _ps_context_set_service(gpointer object, gpointer service)
 {
 	PsContext *context = object;
+
+	dbg("Setting Service: [0x%x]", service);
+
 	g_return_val_if_fail(context != NULL, FALSE);
 
 	context->p_service = service;
@@ -1664,28 +1690,44 @@ gboolean _ps_context_set_connected(gpointer object, gboolean enabled)
 	PsContext *context = object;
 	g_return_val_if_fail(context != NULL, FALSE);
 
+	dbg("Set Service State: [%s]",
+			(enabled ? "CONNECTED" : "NOT CONNECTED"));
 
+	/* Get IPv4 Address */
 	ipv4 = tcore_context_get_ipv4_addr(context->co_context);
+	dbg("IPv4 Address: [%s]", ipv4);
 
 	if (enabled) {
-
+		dbg("Set state - ACTIVATED");
 		tcore_context_set_state(context->co_context, CONTEXT_STATE_ACTIVATED);
+
+		/* If IP address is 0.0.0.0, deactivate the context */
 		if( g_str_equal(ipv4, "0.0.0.0") == TRUE ){
-			dbg("ip address is 0.0.0.0");
+			dbg("IP Address: [0.0.0.0] - Deactivate context!!!");
 			_ps_service_deactivate_context(context->p_service, context);
 			return TRUE;
 		}
-		_ps_service_reset_connection_timer(context);
 
+		/* Reset connection timer */
+		_ps_service_reset_connection_timer(context);
 	}
 	else {
+		dbg("Set state - DEACTIVATED");
 		tcore_context_set_state(context->co_context, CONTEXT_STATE_DEACTIVATED);
+
+		/* Reset device information */
 		tcore_context_reset_devinfo(context->co_context);
+
+		/* Reset connection timer */
 		_ps_service_connection_timer(context->p_service, context);
 	}
 
+	/* Emit Property changed signal */
 	__ps_context_emit_property_changed_signal(context);
+
+	/* Free memory */
 	g_free(ipv4);
+
 	return TRUE;
 }
 
@@ -1694,14 +1736,15 @@ gboolean _ps_context_set_ps_defined(gpointer *object, gboolean value, int cid)
 	PsContext *context = (PsContext *)object;
 
 	g_return_val_if_fail(context != NULL, FALSE);
-	
+
 	if(tcore_context_get_id(context->co_context) == (unsigned int)cid){
 		context->ps_defined = value;
-		dbg("context(%p) ps_defined(%d)", context, context->ps_defined);
+		dbg("Context: [0x%x] Context define: [%s]",
+				context, (context->ps_defined ? "YES" : "NO"));
 		return TRUE;
 	}
-	dbg("context(%p) does not have cid(%d)",context, cid);
 
+	dbg("Context ID [%d] not found in Context: [0x%x]", cid, context);
 	return FALSE;
 }
 

@@ -28,6 +28,18 @@
 
 #include <ps.h>
 
+static enum tcore_hook_return __on_hook_modem_added(Server *s, CoreObject *source,
+		enum tcore_notification_command command, unsigned int data_len, void *data, void *user_data)
+{
+	gpointer *master = user_data;
+	gboolean rv=FALSE;
+
+	rv = _ps_master_create_modems(master);
+	dbg("Modem Added hook operation: [%s]", (rv ? "SUCCESS" : "FAIL"));
+
+	return TCORE_HOOK_RETURN_STOP_PROPAGATION;
+}
+
 static gboolean on_load()
 {
 	dbg("PacketService plugin load!");
@@ -58,8 +70,15 @@ static gboolean on_init(TcorePlugin *p)
 
 	master = _ps_master_create_master(conn, p);
 	rv = _ps_master_create_modems(master);
+	if (rv == FALSE) {
+		dbg("Modem NOT created... will wait for TNOTI_MODEM_ADDED notification");
 
-	dbg("initialized PacketService plugin!");
+		tcore_server_add_notification_hook(tcore_plugin_ref_server(p),
+							TNOTI_MODEM_ADDED, __on_hook_modem_added, master);
+	} else {
+		dbg("initialized PacketService plugin!");
+	}
+
 	return TRUE;
 }
 

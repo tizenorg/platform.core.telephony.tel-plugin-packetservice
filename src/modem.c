@@ -202,27 +202,27 @@ static void __ps_modem_set_property(GObject *object, guint prop_id, const GValue
 		case PROP_MODEM_PATH: {
 			if (modem->path) g_free(modem->path);
 			modem->path = g_value_dup_string(value);
-			msg("modem(%p) set path(%s)", modem, modem->path);
+			msg("	modem(%p) set path(%s)", modem, modem->path);
 		}
 			break;
 		case PROP_MODEM_MASTER: {
 			modem->p_master = g_value_get_pointer(value);
-			msg("modem(%p) set master(%p)", modem, modem->p_master);
+			msg("	modem(%p) set master(%p)", modem, modem->p_master);
 		}
 			break;
 		case PROP_MODEM_PLUGIN: {
 			modem->plg = g_value_get_pointer(value);
-			msg("modem(%p) set plg(%p)", modem, modem->plg);
+			msg("	modem(%p) set plg(%p)", modem, modem->plg);
 		}
 			break;
 		case PROP_MODEM_COMODEM: {
 			modem->co_modem = g_value_get_pointer(value);
-			msg("modem(%p) set coreobject modem(%p)", modem, modem->co_modem);
+			msg("	modem(%p) set coreobject modem(%p)", modem, modem->co_modem);
 		}
 			break;
 		case PROP_MODEM_CONN: {
 			modem->conn = g_value_get_boxed(value);
-			msg("modem(%p) set conn(%p)", modem, modem->conn);
+			msg("	modem(%p) set conn(%p)", modem, modem->conn);
 		}
 			break;
 		default:
@@ -309,8 +309,10 @@ static void __ps_modem_emit_property_changed_signal(PsModem *modem)
 
 	properties = g_hash_table_new(g_str_hash, g_str_equal);
 	_ps_modem_get_properties(modem, properties);
+
+	dbg("Emit signal - 'PROPERTY CHANGED' - modem: [0x%x]", modem);
 	g_signal_emit(modem, signals[SIG_MODEM_PROPERTY_CHANGED], 0, properties);
-	dbg("modem (%p) emit property changed signal", modem);
+
 	g_hash_table_destroy(properties);
 
 	return;
@@ -322,8 +324,10 @@ static void __ps_modem_emit_service_added_signal(PsModem *modem, gpointer servic
 
 	properties = g_hash_table_new(g_str_hash, g_str_equal);
 	_ps_service_get_properties(service, properties);
+
+	dbg("Emit signal - MODEM SERVICE ADDED' - modem: [0x%x] service: [0x%x]", modem, service);
 	g_signal_emit(modem, signals[SIG_MODEM_SERVICE_ADDED], 0, properties);
-	dbg("modem (%p) emit the service(%p) added signal", modem, service);
+
 	g_hash_table_destroy(properties);
 	return;
 }
@@ -350,23 +354,33 @@ static void __ps_modem_create_service(DBusGConnection *conn, TcorePlugin *p,
 	CoreObject *co_network = NULL;
 	TcorePlugin *target_plg = NULL;
 
+	dbg("Create Modem Service - Path: [%s]", _ps_modem_ref_path(modem));
+
 	target_plg = tcore_object_ref_plugin(co_modem);
 	co_ps = tcore_plugin_ref_core_object(target_plg, CORE_OBJECT_TYPE_PS);
-	if (!co_ps)
+	if (!co_ps) {
+		err("No PS Core object");
 		return;
+	}
 
 	co_network = tcore_plugin_ref_core_object(target_plg, CORE_OBJECT_TYPE_NETWORK);
-	if (!co_network)
+	if (!co_network) {
+		err("No NETWORK Core object");
 		return;
+	}
 
 	t_path = g_strdup_printf("%s_ps", _ps_modem_ref_path(modem));
-	dbg("service path (%s)", t_path);
+	dbg("Service Path: [%s]", t_path);
+
 	object = _ps_service_create_service(conn,p, modem, co_network, co_ps, t_path);
+	dbg("Created Service: [0x%x]", object);
 
 	g_hash_table_insert( ((PsModem *) modem)->services, g_strdup(t_path), object);
-	dbg("service (%p) insert to hash", object);
+
+	/* Emit Service signal */
 	__ps_modem_emit_service_added_signal((PsModem *) modem, object);
 
+	/* Free memory */
 	g_free(t_path);
 
 	return;
@@ -385,11 +399,14 @@ static void __ps_modem_remove_service(PsModem *modem, gpointer service)
 
 static gboolean __ps_modem_set_powered(PsModem *modem, gboolean value)
 {
+	dbg("modem: [0x%x] Modem powered: [%s]", modem,(value ? "YES" : "NO"));
 	g_return_val_if_fail(modem != NULL, FALSE);
 
 	modem->powered = value;
-	dbg("modem(%p) powered(%d)", modem, modem->powered);
+
+	/* Emit Property change signal */
 	__ps_modem_emit_property_changed_signal(modem);
+
 	return TRUE;
 }
 
@@ -401,18 +418,26 @@ static gboolean __ps_modem_set_sim_complete(PsModem *modem, gboolean value, gcha
 	if (value && operator != NULL && !modem->operator)
 		modem->operator = g_strdup(operator);
 
-	dbg("modem(%p) sim init(%d) operator(%s)", modem, modem->sim_init, modem->operator);
+	dbg("modem: [0x%x] SIM init: '%s' operator: [%s]",
+				modem, (modem->sim_init ? "TRUE" : "FALSE"), modem->operator);
+
+	/* Emit Property change signal */
 	__ps_modem_emit_property_changed_signal(modem);
+
 	return TRUE;
 }
 
-static gboolean __ps_modem_set_flght_mode(PsModem *modem, gboolean value)
+static gboolean __ps_modem_set_flight_mode(PsModem *modem, gboolean value)
 {
 	g_return_val_if_fail(modem != NULL, FALSE);
 
 	modem->flight_mode = value;
 	dbg("modem(%p) flight_mode(%d)", modem, modem->flight_mode);
+
+	/* Emit Property change signal */
 	__ps_modem_emit_property_changed_signal(modem);
+
+	/* Process modem event */
 	__ps_modem_processing_modem_event(modem);
 
 	return TRUE;
@@ -423,16 +448,19 @@ static void __ps_modem_get_ps_setting_from_storage(GObject *object)
 	gboolean key_3g_enable = FALSE, key_roaming_allowed = FALSE;
 	PsModem *modem = NULL;
 
+	dbg("Extract PS settings");
+
 	modem = (PsModem *) object;
 	key_3g_enable = _ps_master_get_storage_value(modem->p_master, KEY_3G_ENABLE);
 	key_roaming_allowed = _ps_master_get_storage_value(modem->p_master, KEY_DATA_ROAMING_SETTING);
+	msg("	Data allowed: [%s]", key_3g_enable ? "YES" : "NO");
+	msg("	Roaming allowed: [%s]", key_roaming_allowed ? "YES" : "NO");
 
+	/* Set Data allowed value */
 	_ps_modem_set_data_allowed(modem, key_3g_enable);
+
+	/* Set Roaming allowed value */
 	_ps_modem_set_data_roaming_allowed(modem, key_roaming_allowed);
-
-	dbg("data allowed(%d) roaming allowed(%d)", key_3g_enable, key_roaming_allowed);
-
-	return;
 }
 
 static void __ps_modem_processing_modem_event(gpointer object)
@@ -454,6 +482,7 @@ static void __ps_modem_processing_modem_event(gpointer object)
 		_ps_update_cellular_state_key(value);
 
 		if(!modem->powered){
+			dbg("modem is not powered");
 			_ps_service_remove_contexts(value);
 			_ps_free_co_ps_event(value);
 			_ps_free_co_network_event(value);
@@ -461,12 +490,14 @@ static void __ps_modem_processing_modem_event(gpointer object)
 			continue;
 		}
 
-		if(modem->flight_mode || !modem->data_allowed || (s_roaming && !modem->roaming_allowed) ){
+		if(modem->flight_mode
+				|| !modem->data_allowed
+				|| (s_roaming && !modem->roaming_allowed) ){
 			_ps_service_disconnect_contexts(value);
 			continue;
 		}
 
-		//only available case
+		/* Only available case */
 		_ps_service_connect_default_context(value);
 	}
 
@@ -481,10 +512,12 @@ gpointer _ps_modem_create_modem(DBusGConnection *conn, TcorePlugin *p, gpointer 
 	DBusGProxy *proxy;
 	GError *error = NULL;
 
-	dbg("modem object create");
+	dbg("Create modem object");
+
 	g_return_val_if_fail(conn != NULL, NULL);
 	g_return_val_if_fail(master != NULL, NULL);
 
+	/* Creating new Proxy */
 	proxy = dbus_g_proxy_new_for_name(conn, "org.freedesktop.DBus", "/org/freedesktop/DBus",
 			"org.freedesktop.DBus");
 
@@ -493,16 +526,23 @@ gpointer _ps_modem_create_modem(DBusGConnection *conn, TcorePlugin *p, gpointer 
 		err("Failed to acquire service(%s) error(%s)", PS_DBUS_SERVICE, error->message);
 		return NULL;
 	}
+	dbg("Created Proxy - Path: [%s]", PS_DBUS_SERVICE);
 
+	/* Creating new Object */
 	object = g_object_new(PS_TYPE_MODEM, "path", modem_name, "p_master", master, "plg", p, "co_modem",
 			co_modem, "conn", conn, NULL);
 
+	/* Extract PS setting */
 	__ps_modem_get_ps_setting_from_storage(object);
+
+	/* Hook modem & SIM events */
 	_ps_hook_co_modem_event(object);
+
+	/* Extract modem values */
 	_ps_get_co_modem_values(object);
 
 	dbus_g_connection_register_g_object(conn, modem_name, object);
-	msg("modem(%p) register dbus path(%s)", object, modem_name);
+	msg("	modem(%p) register dbus path(%s)", object, modem_name);
 
 	return object;
 }
@@ -511,12 +551,19 @@ gboolean _ps_modem_processing_flight_mode(gpointer object, gboolean enable)
 {
 	PsModem * modem = object;
 
+	dbg("Process Flight mode - Flight mode: [%s]", (enable ? "ON" : "OFF"));
+
 	g_return_val_if_fail(modem != NULL, FALSE);
 
-	if (modem->flight_mode == enable)
+	if (modem->flight_mode == enable) {
+		dbg("No change in Flight mode: [%s]",
+			(modem->flight_mode ? "ON" : "OFF"));
 		return TRUE;
+	}
 
-	__ps_modem_set_flght_mode(modem, enable);
+	/* Set Flight mode */
+	__ps_modem_set_flight_mode(modem, enable);
+
 	return TRUE;
 }
 
@@ -524,16 +571,26 @@ gboolean _ps_modem_processing_power_enable(gpointer object, gboolean enable)
 {
 	PsModem * modem = object;
 
+	dbg("Process Power - Enable: [%s]", (enable ? "ENABLE" : "DISABLE"));
+
 	g_return_val_if_fail(modem != NULL, FALSE);
 
-	if (modem->powered == enable)
+	if (modem->powered == enable) {
+		dbg("No change in Modem Power: [%s]",
+			(modem->powered ? "ENABLE" : "DISABLE"));
 		return TRUE;
+	}
 
+	/* Set Modem Power */
 	__ps_modem_set_powered(modem, enable);
-	if (enable)
+
+	if (enable) {
+		dbg("Create Service");
 		__ps_modem_create_service(modem->conn, modem->plg, modem, modem->co_modem);
-	else
+	} else {
+		dbg("Process modem event");
 		__ps_modem_processing_modem_event(modem);
+	}
 
 	return TRUE;
 }
@@ -542,12 +599,17 @@ gboolean _ps_modem_processing_sim_complete(gpointer object, gboolean complete, g
 {
 	PsModem * modem = object;
 	GHashTable *contexts = NULL;
+	dbg("SIM init: '%s' Operator: [%s]", (complete ? "YES" : "NO"), operator);
 
 	g_return_val_if_fail(modem != NULL, FALSE);
 
-	if (modem->sim_init == complete)
+	if (modem->sim_init == complete) {
+		dbg("No change in SIM init state - SIM INIT COMPLETE: [%s]",
+			(modem->sim_init ? "YES" : "NO"));
 		return TRUE;
+	}
 
+	/* Set SIM init */
 	__ps_modem_set_sim_complete(modem, complete, operator);
 	if (modem->sim_init == TRUE && modem->operator != NULL)
 		contexts = _ps_context_create_hashtable(modem->conn, modem->plg, modem->operator);
@@ -670,7 +732,7 @@ gboolean _ps_modem_get_properties(gpointer object, GHashTable *properties)
 {
 	PsModem *modem = object;
 
-	dbg("get modem properties");
+	dbg("Get modem properties");
 	g_return_val_if_fail(modem != NULL, FALSE);
 	g_return_val_if_fail(properties != NULL, FALSE);
 
@@ -681,6 +743,14 @@ gboolean _ps_modem_get_properties(gpointer object, GHashTable *properties)
 	g_hash_table_insert(properties, "flight_mode", BOOL2STRING(modem->flight_mode));
 	g_hash_table_insert(properties, "roaming_allowed", BOOL2STRING(modem->roaming_allowed));
 	g_hash_table_insert(properties, "data_allowed", BOOL2STRING(modem->data_allowed));
+
+	msg("	Path: [%s]", modem->path);
+	msg("	Operator: [%s]", modem->operator);
+	msg("	Powered: [%s]", modem->powered ? "YES" : "NO");
+	msg("	SIM Init: [%s]", modem->sim_init ? "YES" : "NO");
+	msg("	Flight mode: [%s]", modem->flight_mode ? "ON" : "OFF");
+	msg("	Roaming allowed: [%s]", modem->roaming_allowed ? "YES" : "NO");
+	msg("	Data allowed: [%s]", modem->data_allowed ? "YES" : "NO");
 
 	return TRUE;
 }

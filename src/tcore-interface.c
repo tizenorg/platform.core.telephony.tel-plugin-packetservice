@@ -24,6 +24,7 @@
 #include <server.h>
 #include <plugin.h>
 #include <storage.h>
+#include <util.h>
 #include <co_ps.h>
 #include <co_modem.h>
 #include <co_sim.h>
@@ -42,12 +43,17 @@ static enum tcore_hook_return __on_hook_call_status(Server *s, CoreObject *sourc
 	GSList *contexts;
 	CoreObject *co_context;
 
-	dbg("call status event");
+	dbg("CALL Status event");
+
 	g_return_val_if_fail(service != NULL, TCORE_HOOK_RETURN_STOP_PROPAGATION);
 
-	cstatus = (struct tnoti_ps_call_status *) data;
-	dbg("call status event cid(%d) state(%d)",
-			cstatus->context_id, cstatus->state);
+	cstatus = (struct tnoti_ps_call_status *)data;
+	g_return_val_if_fail(cstatus != NULL, TCORE_HOOK_RETURN_STOP_PROPAGATION);
+
+	dbg("Context ID: [%d] Call State: [%s]", cstatus->context_id,
+		((cstatus->state == PS_DATA_CALL_CTX_DEFINED) ? "DEFINED"
+			: (cstatus->state == PS_DATA_CALL_CONNECTED) ? "CONNECTED"
+			: "NOT CONNECTED"));
 
 	if (cstatus->state == PS_DATA_CALL_CTX_DEFINED)
 		goto out;
@@ -56,35 +62,47 @@ static enum tcore_hook_return __on_hook_call_status(Server *s, CoreObject *sourc
 	else if (cstatus->state == PS_DATA_CALL_NOT_CONNECTED)
 		netif_updown = FALSE;
 
+	/* Refer to context */
 	contexts = tcore_ps_ref_context_by_id(source, cstatus->context_id);
 	for (; contexts != NULL; contexts = g_slist_next(contexts)) {
 		co_context = contexts->data;
-		ifname = tcore_context_get_ipv4_devname(co_context);
-
-		if (ifname == NULL)
+		if (co_context == NULL) {
+			dbg("Context is NULL");
 			continue;
+		}
 
+		/* Get Interface name */
+		ifname = tcore_context_get_ipv4_devname(co_context);
+		if (ifname == NULL) {
+			dbg("Interface name is NULL");
+			continue;
+		}
+
+		/* Setup network interface */
 		if (tcore_util_netif(ifname, netif_updown)
 					!= TCORE_RETURN_SUCCESS) {
 			g_slist_free(contexts);
 			g_free(ifname);
-			dbg("tcore_util_netif() failed.");
+			err("Failed to setup interface - Interface name: [%s] Interface Status: [%s]",
+					ifname, (netif_updown ? "UP" : "DOWN"));
 		}
+		dbg("Successfully setup interface - Interface name: [%s] Interface Status: [%s]",
+				ifname, (netif_updown ? "UP" : "DOWN"));
 	}
 
 out:
 	//send activation event / deactivation event
-	if (cstatus->state == PS_DATA_CALL_CTX_DEFINED) {/* OK: PDP define is complete. */
-		dbg("service is ready to activate");
+	if (cstatus->state == PS_DATA_CALL_CTX_DEFINED) {			/* OK: PDP define is complete. */
+		dbg("Service - [READY TO ACTIVATE]");
 		_ps_service_set_ps_defined(service, TRUE, cstatus->context_id);
 		//_ps_service_connect_default_context(service);
 	}
-	else if (cstatus->state == PS_DATA_CALL_CONNECTED) {/* CONNECTED */
-		dbg("service is activated");
+	else if (cstatus->state == PS_DATA_CALL_CONNECTED) {		/* CONNECTED */
+		dbg("Service - [ACTIVATED]");
 		_ps_service_set_connected(service, cstatus->context_id, TRUE);
 	}
-	else if (cstatus->state == PS_DATA_CALL_NOT_CONNECTED) { /* NO CARRIER */
-		dbg("service is deactivated");
+	else if (cstatus->state == PS_DATA_CALL_NOT_CONNECTED) {	/* NO CARRIER */
+		dbg("Service - [DEACTIVATED]");
 		_ps_service_set_ps_defined(service, FALSE, cstatus->context_id);
 		_ps_service_set_connected(service, cstatus->context_id, FALSE);
 	}
@@ -117,11 +135,11 @@ static enum tcore_hook_return __on_hook_ipconfiguration(Server *s, CoreObject *s
 	co_ps = (CoreObject *) _ps_service_ref_co_ps(service);
 
 	if (co_ps != source) {
-		dbg("ps object is different");
+		dbg("Mismatching PS object");
 		return TCORE_HOOK_RETURN_CONTINUE;
 	}
 
-	dbg("ip configuration event");
+	dbg("IP Configuration event");
 	_ps_service_set_context_info(service, devinfo);
 
 	return TCORE_HOOK_RETURN_CONTINUE;
@@ -135,17 +153,21 @@ static enum tcore_hook_return __on_hook_powered(Server *s, CoreObject *source,
 
 	gboolean power = FALSE;
 
-	dbg("powered event called");
+	dbg("Powered event");
 
 	g_return_val_if_fail(modem != NULL, TCORE_HOOK_RETURN_STOP_PROPAGATION);
 
 	modem_power = (struct tnoti_modem_power *)data;
+	dbg("Modem Power state: [%s]",
+		((modem_power->state == MODEM_STATE_ONLINE) ? "ONLINE"
+		: (modem_power->state == MODEM_STATE_OFFLINE) ? "OFFLINE" : "ERROR"));
 
 	if ( modem_power->state == MODEM_STATE_ONLINE )
 		power = TRUE;
 	else
 		power = FALSE;
 
+	/* Process modem Power state */
 	_ps_modem_processing_power_enable(modem, power);
 
 	return TCORE_HOOK_RETURN_CONTINUE;
@@ -156,11 +178,15 @@ static enum tcore_hook_return __on_hook_flight(Server *s, CoreObject *source,
 {
 	gpointer modem = user_data;
 	struct tnoti_modem_flight_mode *modem_flight = NULL;
-	dbg("flight event called");
+
+	dbg("Flight mode event");
 
 	g_return_val_if_fail(modem != NULL, TCORE_HOOK_RETURN_STOP_PROPAGATION);
 
 	modem_flight = (struct tnoti_modem_flight_mode *)data;
+	dbg("Flight mode: [%s]", (modem_flight->enable ? "ON" : "OFF"));
+
+	/* Process Flight mode event */
 	_ps_modem_processing_flight_mode(modem, modem_flight->enable);
 
 	return TCORE_HOOK_RETURN_CONTINUE;
@@ -208,16 +234,16 @@ static enum tcore_hook_return __on_hook_sim_init(Server *s, CoreObject *source,
 {
 	struct tnoti_sim_status *sim_data;
 
-	dbg("sim init event called");
+	dbg("SIM INIT event");
 	g_return_val_if_fail(user_data != NULL, TCORE_HOOK_RETURN_STOP_PROPAGATION);
 
 	sim_data = (struct tnoti_sim_status *)data;
-	dbg("sim status is (%d)", sim_data->sim_status);
+	dbg("SIM status: [0x%02x]", sim_data->sim_status);
 
 	if( sim_data->sim_status == SIM_STATUS_INIT_COMPLETED){
 		struct tel_sim_imsi *sim_imsi = NULL;
 		sim_imsi = tcore_sim_get_imsi(source);
-		_ps_modem_processing_sim_complete( (gpointer)user_data, TRUE, (gchar *)sim_imsi->plmn);
+		_ps_modem_processing_sim_complete((gpointer)user_data, TRUE, (gchar *)sim_imsi->plmn);
 		g_free(sim_imsi);
 	}
 
@@ -229,6 +255,8 @@ gboolean _ps_hook_co_modem_event(gpointer modem)
 	Server *s = NULL;
 	TcorePlugin *p;
 	g_return_val_if_fail(modem != NULL, FALSE);
+
+	dbg("Hook Modem & SIM events");
 
 	p = _ps_modem_ref_plugin(modem);
 	s = tcore_plugin_ref_server(p);
@@ -250,6 +278,8 @@ gboolean _ps_get_co_modem_values(gpointer modem)
 	int sim_status = 0;
 	struct tel_sim_imsi *sim_imsi = NULL;
 
+	dbg("Extract modem values");
+
 	g_return_val_if_fail(modem != NULL, FALSE);
 
 	co_modem = _ps_modem_ref_co_modem(modem);
@@ -264,16 +294,35 @@ gboolean _ps_get_co_modem_values(gpointer modem)
 	if (!co_sim)
 		return FALSE;
 
+	/* SIM State */
 	sim_status = tcore_sim_get_status(co_sim);
-	if(sim_status == SIM_STATUS_INIT_COMPLETED)
+	if(sim_status == SIM_STATUS_INIT_COMPLETED) {
 		sim_init = TRUE;
 
+		/*
+		 * If SIM State is initialized then fetch the Modem Power,
+		 * else wait for Modem Power Notification.
+		 */
+		modem_powered = tcore_modem_get_powered(co_modem);
+	}
+
+	/* IMSI */
 	sim_imsi = tcore_sim_get_imsi(co_sim);
-	modem_powered = tcore_modem_get_powered(co_modem);
+
+	/* Flight mode */
 	flight_mode = tcore_modem_get_flight_mode_state(co_modem);
 
+	msg("	SIM init: [%s]", sim_init ? "YES" : "NO");
+	msg("	Modem powered: [%s]", modem_powered ? "YES" : "ON");
+	msg("	Flight mode: [%s]", flight_mode ? "ON" : "OFF");
+
+	/* Set Flight mode */
 	_ps_modem_processing_flight_mode(modem, flight_mode);
+
+	/* Set Power power */
 	_ps_modem_processing_power_enable(modem, modem_powered);
+
+	/* Process SIM state */
 	_ps_modem_processing_sim_complete(modem, sim_init, (gchar *)sim_imsi->plmn);
 
 	g_free(sim_imsi);

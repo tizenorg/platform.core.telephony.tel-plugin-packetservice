@@ -156,18 +156,18 @@ static void __ps_master_set_property(GObject *object, guint prop_id, const GValu
 	switch (prop_id) {
 		case PROP_MASTER_PLUGIN: {
 			master->plg = g_value_get_pointer(value);
-			msg("master(%p) set plg(%p)", master, master->plg);
+			msg("	master(%p) set plg(%p)", master, master->plg);
 		}
 			break;
 		case PROP_MASTER_CONN: {
 			master->conn = g_value_get_boxed(value);
-			msg("master(%p) set conn(%p)", master, master->conn);
+			msg("	master(%p) set conn(%p)", master, master->conn);
 		}
 			break;
 		case PROP_MASTER_PATH: {
 			if (master->path) g_free(master->path);
 			master->path = g_value_dup_string(value);
-			msg("master(%p) set path(%s)", master, master->path);
+			msg("	master(%p) set path(%s)", master, master->path);
 		}
 			break;
 		default:
@@ -468,7 +468,7 @@ gpointer _ps_master_create_master(DBusGConnection *conn, TcorePlugin *p)
 
 	object = g_object_new(PS_TYPE_MASTER, "plg", p, "conn", conn, "path", PS_MASTER_PATH, NULL);
 	dbus_g_connection_register_g_object(conn, PS_MASTER_PATH, object);
-	msg("master(%p) register dbus path(%s)", object, PS_MASTER_PATH);
+	msg("	master(%p) register dbus path(%s)", object, PS_MASTER_PATH);
 
 	__ps_master_register_key_callback(object, KEY_3G_ENABLE);
 	__ps_master_register_key_callback(object, KEY_DATA_ROAMING_SETTING);
@@ -482,6 +482,7 @@ gboolean _ps_master_create_modems(gpointer object)
 	GSList *plist = NULL;
 	gpointer modem = NULL, tmp = NULL;
 	PsMaster *master = NULL;
+	gboolean ret = FALSE;
 
 	dbg("create modem objects");
 	g_return_val_if_fail(object != NULL, FALSE);
@@ -501,6 +502,12 @@ gboolean _ps_master_create_modems(gpointer object)
 		gchar *modem_name = NULL;
 
 		p = plist->data;
+
+		/* AT Standard Plug-in is not considered */
+		if ((p == NULL)
+				|| (strcmp(tcore_plugin_ref_plugin_name(p), "AT") == 0))
+			continue;
+
 		co_modem = tcore_plugin_ref_core_object(p, CORE_OBJECT_TYPE_MODEM);
 		if (!co_modem)
 			continue;
@@ -524,9 +531,11 @@ gboolean _ps_master_create_modems(gpointer object)
 		__ps_master_emit_modem_added_signal(master, modem);
 
 		g_free(modem_name);
+
+		ret = TRUE;
 	}
 
-	return TRUE;
+	return ret;
 }
 
 gboolean _ps_master_get_storage_value(gpointer object, enum tcore_storage_key key)

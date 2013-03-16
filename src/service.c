@@ -396,7 +396,7 @@ static gboolean __ps_service_check_connection_option(gpointer object)
 	b_connect &= sim;
 	b_connect &= data;
 	b_connect &= !flight;
-	dbg("power(%d), sim init(%d), data allowed(%d), filght mode(%d)", power, sim, data, flight);
+	dbg("power(%d), sim init(%d), data allowed(%d), flight mode(%d)", power, sim, data, flight);
 
 	return b_connect;
 }
@@ -421,10 +421,11 @@ gpointer _ps_service_create_service(DBusGConnection *conn, TcorePlugin *p, gpoin
 	DBusGProxy *proxy;
 	GError *error = NULL;
 
-	dbg("service object create");
+	dbg("Create SERVICE object - Path: [%s]", path);
 	g_return_val_if_fail(conn != NULL, NULL);
 	g_return_val_if_fail(p_modem != NULL, NULL);
 
+	/* Create new Proxy */
 	proxy = dbus_g_proxy_new_for_name(conn, "org.freedesktop.DBus", "/org/freedesktop/DBus",
 			"org.freedesktop.DBus");
 
@@ -433,7 +434,9 @@ gpointer _ps_service_create_service(DBusGConnection *conn, TcorePlugin *p, gpoin
 		err("Failed to acquire context(%s) error(%s)", PS_DBUS_SERVICE, error->message);
 		return NULL;
 	}
+	dbg("Acquired context: [%s]", PS_DBUS_SERVICE);
 
+	/* Creating new Service object */
 	object = g_object_new(PS_TYPE_SERVICE, "conn", conn, "plg", p, "p_modem", p_modem, "co_network",
 			co_network, "co_ps", co_ps, "path", path, NULL);
 
@@ -482,7 +485,8 @@ gboolean _ps_service_ref_contexts(gpointer object, GHashTable *contexts, gchar *
 	gboolean ret = TRUE;
 	int rv;
 
-	dbg("service refer to contexts");
+	dbg("Service refer to Contexts");
+
 	g_return_val_if_fail(service != NULL, FALSE);
 
 	g_hash_table_iter_init(&iter, contexts);
@@ -492,28 +496,42 @@ gboolean _ps_service_ref_contexts(gpointer object, GHashTable *contexts, gchar *
 		gboolean f_awo = FALSE;
 
 		s_path = _ps_context_ref_path(value);
+		dbg("Path: [%s]", s_path);
+
+		/* Hash lookup */
 		tmp = g_hash_table_lookup(service->contexts, s_path);
 		if (tmp != NULL) {
-			dbg("context(%p) already existed", tmp);
+			dbg("context [0x%x] already existed", tmp);
 			continue;
 		}
 
+		/* Setting service */
 		_ps_context_set_service(value, service);
-		tcore_ps_add_context(service->co_ps, (CoreObject *) _ps_context_ref_co_context(value));
+
+		/* Add Context to PS Core object */
+		tcore_ps_add_context(service->co_ps, (CoreObject *)_ps_context_ref_co_context(value));
+
+		/* Insert conetxt to Hash Table */
 		g_hash_table_insert(service->contexts, g_strdup(s_path), value);
 
-		dbg("context(%p) insert to hash", value);
+		dbg("Inserted context to Hash table - context [0x%x]", value);
+
+		/* Emit Context added signal */
 		__ps_service_emit_context_added_signal(service, value);
-	
+
 		f_awo = _ps_context_get_alwayson_enable(value);
-		if(f_awo){
+		dbg("Always ON: [%s]", (f_awo ? "YES" : "NO"));
+		if(f_awo) {
+			dbg("Define Context");
 			rv = _ps_service_define_context(service, value);
 			dbg("return rv(%d)", rv);
 		}
 	}
 
+	/* Update cellular state key */
 	_ps_update_cellular_state_key(service);
-	//_ps_service_connect_default_context(service);	
+	//_ps_service_connect_default_context(service);
+
 	return ret;
 }
 
@@ -586,23 +604,28 @@ gboolean _ps_service_set_context_info(gpointer object, struct tnoti_ps_pdp_ipcon
 	GSList* contexts = NULL;
 	PsService *service = object;
 
-	dbg("set context info");
+	dbg("Set context information");
+
 	g_return_val_if_fail(service != NULL, FALSE);
 
+	/* Refer context */
+	dbg("Context ID: [%d]", devinfo->context_id);
 	contexts = tcore_ps_ref_context_by_id(service->co_ps, devinfo->context_id);
-
 	if (NULL == contexts) {
-		dbg("fail to ref context by cid.");
+		dbg("Failed to refer context");
 		return FALSE;
 	}
-	
+
 	for (; contexts != NULL; contexts = g_slist_next(contexts)) {
 		CoreObject *co_context = NULL;
 
 		co_context = contexts->data;
-		if (NULL == co_context)
+		if (NULL == co_context) {
+			dbg("Context is NULL");
 			continue;
+		}
 
+		/* Set device information */
 		tcore_context_set_devinfo(co_context, devinfo);
 	}
 
@@ -635,26 +658,30 @@ int _ps_service_activate_context(gpointer object, gpointer context)
 	gboolean ps_defined;
 	int ret = TCORE_RETURN_FAILURE;
 
-	dbg("activate context(%p)", context);
-	g_return_val_if_fail(service != NULL, FALSE);
+	dbg("Activate context [0x%x]", context);
+	g_return_val_if_fail(service != NULL, TCORE_RETURN_EINVAL);
 
 	co_context = (CoreObject *)_ps_context_ref_co_context(context);
 
-	b_connect = __ps_service_check_connection_option(service);	
+	/* Check for connection option */
+	b_connect = __ps_service_check_connection_option(service);
+	dbg("Service option - PS Attached: [%s]", (service->ps_attached ? "YES" : "NO"));
+
 	b_connect &= service->ps_attached;
+	dbg("Connect: [%s]", (b_connect ? "YES" : "NO"));
 	if(!b_connect)
 		return TCORE_RETURN_EPERM;
 
 	ps_defined = _ps_context_get_ps_defined(context);
 	if(!ps_defined) {
-		dbg("pdp profile is not defined yet, define first. ");
+		dbg("PDP profile is NOT defined!!! Need to define it first...");
 		ret = tcore_ps_define_context(service->co_ps, co_context, NULL);
 	}
 	else {
-		dbg("pdp profile is defined, activate context. ");
+		dbg("PDP profile is defined!!! Activate context...");
 		ret = tcore_ps_activate_context(service->co_ps, co_context, NULL);
 	}
-	
+
 	return ret;
 }
 
@@ -694,18 +721,18 @@ void _ps_service_reset_connection_timer(gpointer context)
 	gboolean f_awo = FALSE;
 
 	f_awo = _ps_context_get_alwayson_enable(context);
-	if(!f_awo)
+	dbg("Always ON: [%s]", (f_awo ? "YES" : "NO"));
+	if(f_awo == FALSE)
 		return;
 
 	connection_timeout = TIMEOUT_DEFAULT;
 
 	if (timer_src != 0) {
-		dbg("remove connection retry timer (%d)", timer_src);
+		dbg("Remove connection Retry timer [%d]", timer_src);
+
 		g_source_remove(timer_src);
 		timer_src = 0;
 	}
-
-	return;
 }
 
 void _ps_service_remove_contexts(gpointer object)
@@ -763,17 +790,21 @@ void _ps_service_connect_default_context(gpointer object)
 	gpointer key, value;
 	PsService *service = object;
 
-	dbg("service connect default context");
+	dbg("Connect to 'default' context");
 	g_return_if_fail(service != NULL);
 
 	g_hash_table_iter_init(&iter, service->contexts);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 		gboolean f_awo = FALSE;
-		f_awo = _ps_context_get_alwayson_enable(value);
 
+		f_awo = _ps_context_get_alwayson_enable(value);
+		dbg("Always ON: [%s]", (f_awo ? "YES" : "NO"));
 		if(f_awo){
 			int rv = 0;
+
 			_ps_service_reset_connection_timer(value);
+
+			/* Activate context */
 			rv = _ps_service_activate_context(service, value);
 			dbg("return rv(%d)", rv);
 			break;
@@ -828,6 +859,9 @@ gboolean _ps_service_set_connected(gpointer object, int context_id, gboolean ena
 	gpointer key, value;
 	PsService *service = NULL;
 
+	dbg("Set service - Context ID: [%d] State: [%s]",
+			context_id, (enabled ? "CONNECTED" : "NOT CONNECTED"));
+
 	service = (PsService *) object;
 	g_hash_table_iter_init(&iter, service->contexts);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
@@ -839,9 +873,12 @@ gboolean _ps_service_set_connected(gpointer object, int context_id, gboolean ena
 
 		if (tmp_cid != context_id) continue;
 
-		if(!enabled)
+		if(!enabled) {
+			dbg("Clear teh context ID");
 			tcore_ps_clear_context_id(service->co_ps, context);
+		}
 
+		/* Set the state */
 		_ps_context_set_connected(value, enabled);
 	}
 
@@ -849,27 +886,34 @@ gboolean _ps_service_set_connected(gpointer object, int context_id, gboolean ena
 }
 
 void _ps_service_set_ps_defined(gpointer *object, gboolean value, int cid)
-{	
+{
 	PsService *service = (PsService*)object;
 	GHashTableIter iter;
-	gpointer key, out;	
+	gpointer key, out;
+
+	dbg("PS Defined - Context ID: [%d] Value: [%d]", cid, value);
 
 	g_return_if_fail(service != NULL);
 
 	g_hash_table_iter_init(&iter, service->contexts);
-	while (g_hash_table_iter_next(&iter, &key, &out) == TRUE) {		
-		gboolean r_actvate = 0;
-		r_actvate = _ps_context_set_ps_defined(out, value, cid);
-		r_actvate &= value;
-		if(r_actvate) {
+	while (g_hash_table_iter_next(&iter, &key, &out) == TRUE) {
+		gboolean r_activate = 0;
+
+		/* Set Context */
+		r_activate = _ps_context_set_ps_defined(out, value, cid);
+		r_activate &= value;
+
+		dbg("Activate context: [%s]", (r_activate ? "YES" : "NO"));
+		if(r_activate) {
 			int rv;
-			dbg("define is complete, activate context for cid(%d)", cid);
+
+			dbg("Activate context - Context ID: [%d]", cid);
 			rv = _ps_service_activate_context(service, out);
-			dbg("rv(%d)",rv);
+			dbg("Activate context request - %s", (rv == TCORE_RETURN_SUCCESS ? "SUCCESS" : "FAIL"));
 			break;
 		}
 	}
-		
+
 	return;
 }
 
