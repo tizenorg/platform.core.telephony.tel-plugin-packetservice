@@ -896,6 +896,19 @@ static int __ps_context_insert_profile_to_database(GHashTable *property, int net
 
 	}
 
+	/*
+	 * Whether a profile is created with no proxy address and port,
+	 * settings application is passing ':' as proxy_addr value.
+	 * Checking proxy _address creation on application is needed, but
+	 * address:port formatting is also double check in packet service
+	 * telephony plugin.
+	 */
+	if (g_strcmp0(proxy_addr, ":") == 0) {
+		dbg("Invalid proxy address, set it to NULL");
+		g_free(proxy_addr);
+		proxy_addr = NULL;
+	}
+
 	dbg("apn (%s), auth_type (%s), auth_id(%s), auth_pwd(%s), proxy_addr(%s), home_url(%s), svc_id(%s)",
 		apn, auth_type, auth_id, auth_pwd, proxy_addr, home_url, svc_id);
 
@@ -914,7 +927,7 @@ static int __ps_context_insert_profile_to_database(GHashTable *property, int net
 	strcat(szQuery," network_info_id, svc_category_id, hidden, editable, default_internet_con) values( ");
 	strcat(szQuery," ?, ?, ?, ?, ?, ?,");//1,2,3,4,5,6
 	strcat(szQuery," 1, ?, ?, 300,");//7,8
-	strcat(szQuery," ?, ?, 0, 1, 0)");//9,10
+	strcat(szQuery," ?, ?, 0, 1, ?)");//9,10,11
 
 	insert_key1 = g_strdup_printf("%d", profile_id);
 	insert_key2 = g_strdup_printf("%d", network_id);
@@ -938,6 +951,14 @@ static int __ps_context_insert_profile_to_database(GHashTable *property, int net
 	g_hash_table_insert(in_param, "8", g_strdup(home_url));
 	g_hash_table_insert(in_param, "9", g_strdup(insert_key2));
 	g_hash_table_insert(in_param, "10", g_strdup(svc_id));
+
+	/* If profile received is Internet type */
+	if (g_strcmp0(svc_id, "1") == 0) {
+		dbg("Set new internet profile as default Internet connection");
+		g_hash_table_insert(in_param, "11", g_strdup("1"));
+	/* Profile is MMS or other type don't set it as default */
+	} else
+		g_hash_table_insert(in_param, "11", g_strdup("0"));
 
 	g_free(insert_key1);g_free(insert_key2);g_free(profile_name);
 	g_free(apn);g_free(auth_type);g_free(auth_id);g_free(auth_pwd);
