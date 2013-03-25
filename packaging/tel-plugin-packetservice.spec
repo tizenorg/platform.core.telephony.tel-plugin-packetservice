@@ -1,7 +1,6 @@
-#sbs-git:slp/pkgs/t/tel-plugin-packetservice
 Name:       tel-plugin-packetservice
 Summary:    Telephony Packet Service library
-Version: 0.1.34
+Version:    0.1.34
 Release:    1
 Group:      System/Libraries
 License:    Apache
@@ -22,7 +21,7 @@ Telephony Packet Service library
 %setup -q
 
 %build
-cmake . -DCMAKE_INSTALL_PREFIX=%{_prefix} -DSYSCONFDIR=%{_sysconfdir}
+%cmake . -DSYSCONFDIR=%{_sysconfdir}
 make %{?jobs:-j%jobs}
 
 %post 
@@ -43,12 +42,12 @@ rm -f /usr/share/ps-plugin/dnet_db_data.sql
 #change file permission
 if [ -f /opt/dbspace/.dnet.db ]
 then
-	chmod 660 /opt/dbspace/.dnet.db
+  chmod 660 /opt/dbspace/.dnet.db
 fi
 
 if [ -f /opt/dbspace/.dnet.db-journal ]
 then
-	chmod 664 /opt/dbspace/.dnet.db-journal
+  chmod 664 /opt/dbspace/.dnet.db-journal
 fi
 
 %postun -p /sbin/ldconfig
@@ -60,7 +59,6 @@ mkdir -p %{buildroot}/usr/share/license
 %files
 %manifest tel-plugin-packetservice.manifest
 %defattr(-,root,root,-)
-#%doc COPYING
 /usr/share/ps-plugin/dnet_db.sql
 /usr/share/ps-plugin/dnet_db_data.sql
 %{_sysconfdir}/dbus-1/system.d/*
