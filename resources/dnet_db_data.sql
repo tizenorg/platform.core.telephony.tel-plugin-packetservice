@@ -28,6 +28,14 @@ INSERT INTO "network_info" (network_info_id, network_name, mccmnc) VALUES (27, '
 INSERT INTO "network_info" (network_info_id, network_name, mccmnc) VALUES (28, 'T Mobile UK', '23430');
 INSERT INTO "network_info" (network_info_id, network_name, mccmnc) VALUES (29, 'T Mobile PL', '26002');
 INSERT INTO "network_info" (network_info_id, network_name, mccmnc) VALUES (30, 'F-Bouygues Telecom', '20820');
+INSERT INTO "network_info" (network_info_id, network_name, mccmnc) VALUES (31, 'China Mobile', '46000');
+INSERT INTO "network_info" (network_info_id, network_name, mccmnc) VALUES (32, 'China Unicom', '46001');
+INSERT INTO "network_info" (network_info_id, network_name, mccmnc) VALUES (33, 'China Mobile', '46002');
+INSERT INTO "network_info" (network_info_id, network_name, mccmnc) VALUES (34, 'China Telecom', '46003');
+INSERT INTO "network_info" (network_info_id, network_name, mccmnc) VALUES (35, 'China Telecom', '46005');
+INSERT INTO "network_info" (network_info_id, network_name, mccmnc) VALUES (36, 'China Unicom', '46006');
+INSERT INTO "network_info" (network_info_id, network_name, mccmnc) VALUES (37, 'China Mobile', '46007');
+INSERT INTO "network_info" (network_info_id, network_name, mccmnc) VALUES (38, 'China Tietong', '46020');
 
 INSERT INTO "max_pdp"(network_info_id, max_pdp_3g) VALUES(1, 2);
 INSERT INTO "max_pdp"(network_info_id, max_pdp_3g) VALUES(2, 3);
@@ -94,5 +102,11 @@ INSERT INTO "pdp_profile" (profile_id, profile_name, apn, auth_type, auth_id, au
 INSERT INTO "pdp_profile" (profile_id, profile_name, apn, auth_type, auth_id, auth_pwd, pdp_protocol,proxy_ip_addr,home_url,linger_time, traffic_class,is_static_ip_addr,ip_addr,is_static_dns_addr,dns_addr1,dns_addr2,network_info_id,svc_category_id, hidden, editable, default_internet_con)	VALUES(61, 'T Mobile MMS','mms',0,NULL,NULL,1,'213.158.194.226:8080','http://mms/servlets/mms',300, 0,0,NULL,0,NULL,NULL,29,2, 0, 1, 0);
 INSERT INTO "pdp_profile" (profile_id, profile_name, apn, auth_type, auth_id, auth_pwd, pdp_protocol,proxy_ip_addr,home_url,linger_time, traffic_class,is_static_ip_addr,ip_addr,is_static_dns_addr,dns_addr1,dns_addr2,network_info_id,svc_category_id, hidden, editable, default_internet_con)	VALUES(62, 'Bouygues Internet',NULL,0,NULL,NULL,1,NULL,NULL,300,0,0,NULL,0,NULL,NULL,30,1,0,1,1);
 INSERT INTO "pdp_profile" (profile_id, profile_name, apn, auth_type, auth_id, auth_pwd, pdp_protocol,proxy_ip_addr,home_url,linger_time, traffic_class,is_static_ip_addr,ip_addr,is_static_dns_addr,dns_addr1,dns_addr2,network_info_id,svc_category_id, hidden, editable, default_internet_con)	VALUES(63, 'Bouygues MMS','mms.bouygtel.com',1,NULL,NULL,1,'62.201.129.226:8080','http://mms.bouyguestelecom.fr/mms/wapenc',300,0,0,NULL,0,NULL,NULL,30,2, 0, 1, 0);
+INSERT INTO "pdp_profile" (profile_id, profile_name, apn, auth_type, auth_id, auth_pwd, pdp_protocol,proxy_ip_addr,home_url,linger_time, traffic_class,is_static_ip_addr,ip_addr,is_static_dns_addr,dns_addr1,dns_addr2,network_info_id,svc_category_id, hidden, editable, default_internet_con)	VALUES(64, '�?��移动 (China Mobile) GPRS','cmnet',0,NULL,NULL,1,NULL,NULL,300,0,0,NULL,0,NULL,NULL,31,1,0,1,1);
+INSERT INTO "pdp_profile" (profile_id, profile_name, apn, auth_type, auth_id, auth_pwd, pdp_protocol,proxy_ip_addr,home_url,linger_time, traffic_class,is_static_ip_addr,ip_addr,is_static_dns_addr,dns_addr1,dns_addr2,network_info_id,svc_category_id, hidden, editable, default_internet_con)	VALUES(65, '�?��移动彩信 (China Mobile)','cmwap',1,NULL,NULL,1,'10.0.0.172:8080','http://mmsc.monternet.com',300,0,0,NULL,0,NULL,NULL,31,2, 0, 1, 0);
+INSERT INTO "pdp_profile" (profile_id, profile_name, apn, auth_type, auth_id, auth_pwd, pdp_protocol,proxy_ip_addr,home_url,linger_time, traffic_class,is_static_ip_addr,ip_addr,is_static_dns_addr,dns_addr1,dns_addr2,network_info_id,svc_category_id, hidden, editable, default_internet_con)	VALUES(66, '�?��?��?3g 网络 (China Unicom)','3gnet',0,NULL,NULL,1,NULL,NULL,300,0,0,NULL,0,NULL,NULL,32,1,0,1,1);
+INSERT INTO "pdp_profile" (profile_id, profile_name, apn, auth_type, auth_id, auth_pwd, pdp_protocol,proxy_ip_addr,home_url,linger_time, traffic_class,is_static_ip_addr,ip_addr,is_static_dns_addr,dns_addr1,dns_addr2,network_info_id,svc_category_id, hidden, editable, default_internet_con)	VALUES(67, '�?��?��?3g 彩信 (China Unicom)','3gwap',1,NULL,NULL,1,'10.0.0.172:8080','http://mmsc.myuni.com.cn',300,0,0,NULL,0,NULL,NULL,32,2, 0, 1, 0);
+INSERT INTO "pdp_profile" (profile_id, profile_name, apn, auth_type, auth_id, auth_pwd, pdp_protocol,proxy_ip_addr,home_url,linger_time, traffic_class,is_static_ip_addr,ip_addr,is_static_dns_addr,dns_addr1,dns_addr2,network_info_id,svc_category_id, hidden, editable, default_internet_con)	VALUES(68, '�?��移动 (China Mobile) GPRS','cmnet',0,NULL,NULL,1,NULL,NULL,300,0,0,NULL,0,NULL,NULL,37,1,0,1,1);
+INSERT INTO "pdp_profile" (profile_id, profile_name, apn, auth_type, auth_id, auth_pwd, pdp_protocol,proxy_ip_addr,home_url,linger_time, traffic_class,is_static_ip_addr,ip_addr,is_static_dns_addr,dns_addr1,dns_addr2,network_info_id,svc_category_id, hidden, editable, default_internet_con)	VALUES(69, '�?��移动彩信 (China Mobile)','cmwap',1,NULL,NULL,1,'10.0.0.172:8080','http://mmsc.monternet.com',300,0,0,NULL,0,NULL,NULL,37,2, 0, 1, 0);
 
 
