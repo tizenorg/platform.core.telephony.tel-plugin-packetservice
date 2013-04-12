@@ -422,7 +422,8 @@ gboolean _ps_update_cellular_state_key(gpointer service)
 	Server *s = NULL;
 	gpointer handle = NULL;
 	static Storage *strg;
-	int err_reason = 0;
+	int cur_cell_state = 0;
+	int stored_cell_state = 0;
 
 	s = tcore_plugin_ref_server( (TcorePlugin *)_ps_service_ref_plugin(service) );
 	strg = tcore_server_find_storage(s, "vconf");
@@ -432,8 +433,11 @@ gboolean _ps_update_cellular_state_key(gpointer service)
 		return FALSE;
 	}
 
-	err_reason = _ps_service_check_cellular_state(service);
-	tcore_storage_set_int(strg,STORAGE_KEY_CELLULAR_STATE, err_reason);
+	cur_cell_state = _ps_service_check_cellular_state(service);
+	stored_cell_state = tcore_storage_get_int(strg,STORAGE_KEY_CELLULAR_STATE);
+	dbg("cellular state, current (%d), cur_cell_state (%d)", stored_cell_state, cur_cell_state);
+	if(stored_cell_state != cur_cell_state)
+		tcore_storage_set_int(strg,STORAGE_KEY_CELLULAR_STATE, cur_cell_state);
 
 	return TRUE;
 }

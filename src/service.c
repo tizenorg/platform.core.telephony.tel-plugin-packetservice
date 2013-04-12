@@ -840,12 +840,12 @@ gboolean _ps_service_processing_network_event(gpointer object, gboolean ps_attac
 	PsService *service = object;
 	g_return_val_if_fail(service != NULL, FALSE);
 
-	_ps_update_cellular_state_key(service);
 	if(service->ps_attached == ps_attached && service->roaming == roaming)
 		return TRUE;
 
 	_ps_service_set_ps_attached(service, ps_attached);
 	_ps_service_set_roaming(service, roaming);
+	_ps_update_cellular_state_key(service);
 
 	if(service->ps_attached)
 		_ps_service_connect_default_context(service);
@@ -981,23 +981,23 @@ enum telephony_ps_state _ps_service_check_cellular_state(gpointer object)
 		return TELEPHONY_PS_NO_SERVICE;
 	}
 
-	if(!service->ps_attached){
-		return TELEPHONY_PS_NO_SERVICE;
-	}
-
 	state = _ps_modem_get_flght_mode(service->p_modem);
 	if(state){
 		return TELEPHONY_PS_FLIGHT_MODE;
 	}
 
-	state = _ps_modem_get_data_roaming_allowed(service->p_modem);
-	if(service->roaming && !state){
-		return TELEPHONY_PS_ROAMING_OFF;
+	if(!service->ps_attached){
+		return TELEPHONY_PS_NO_SERVICE;
 	}
 
 	state = _ps_modem_get_data_allowed(service->p_modem);
 	if(!state){
 		return TELEPHONY_PS_3G_OFF;
+	}
+
+	state = _ps_modem_get_data_roaming_allowed(service->p_modem);
+	if(service->roaming && !state){
+		return TELEPHONY_PS_ROAMING_OFF;
 	}
 
 	return TELEPHONY_PS_ON;
