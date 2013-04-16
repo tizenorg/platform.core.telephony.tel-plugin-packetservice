@@ -59,7 +59,7 @@ static gboolean on_init(TcorePlugin *p)
 		err("fail to get dbus(%s)", error->message);
 		return FALSE;
 	}
-	dbg("get dbus connection(%p)", conn);
+	dbg("get dbus connection (%p)", conn);
 
 	dbg("plugin pointer (%p)", p);
 	rv = _ps_context_initialize(p);
