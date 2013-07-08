@@ -1,0 +1,8 @@
+Change-Id: Ic27df6a115c29b8dd3c66944cc1d91792ec8b147
+Code-Review+2: Ryan Ware <ware@linux.intel.com>
+Verified+1: Ryan Ware <ware@linux.intel.com>
+Submitted-by: Ryan Ware <ware@linux.intel.com>
+Submitted-at: Mon, 08 Jul 2013 10:06:43 -0700
+Reviewed-on: https://review.tizen.org/gerrit/4552
+Project: platform/core/telephony/tel-plugin-packetservice
+Branch: refs/heads/tizen
