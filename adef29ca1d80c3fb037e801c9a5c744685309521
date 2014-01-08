@@ -1,0 +1,9 @@
+Code-Review+1: JooSeok Park <jooseok.park@samsung.com>
+Verified+1: Caiwen Zhang <caiwen.zhang@intel.com>
+Code-Review+1: Dongchul Lim <dc7.lim@samsung.com>
+Code-Review+2: Narasimhaiah Suresh Kumar <suresh.n@samsung.com>
+Submitted-by: Caiwen Zhang <caiwen.zhang@intel.com>
+Submitted-at: Wed, 08 Jan 2014 05:13:34 -0800
+Reviewed-on: https://review.tizen.org/gerrit/14317
+Project: platform/core/telephony/tel-plugin-packetservice
+Branch: refs/heads/tizen
