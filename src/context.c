@@ -35,11 +35,11 @@
 #include <arpa/inet.h>
 
 #include <iniparser.h>
+#include <tzplatform_config.h>
 
 #define PROP_DEFAULT		FALSE
 #define PROP_DEFAULT_STR	NULL
 #define BOOL2STRING(a)		((a==TRUE) ? ("TRUE"):("FALSE"))
-#define DATABASE_PATH		"/opt/dbspace/.dnet.db"
 
 /*Properties*/
 enum {
@@ -484,9 +484,11 @@ static gboolean __ps_context_create_storage_handle(gpointer plugin)
 {
 	TcorePlugin *p = plugin;
 	Server *s = tcore_plugin_ref_server(p);
+	const char *path = NULL;
 	strg_db = tcore_server_find_storage(s, "database");
+	path = tzplatform_mkpath(TZ_SYS_DB,".dnet.db");
 
-	handle = tcore_storage_create_handle(strg_db, DATABASE_PATH);
+	handle = tcore_storage_create_handle(strg_db, path);
 	if (!handle)
 		err("fail to create database handle");
 
@@ -1301,7 +1303,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 	{//insert data into table
 		char szQuery[5000];
 
-		memset(szQuery, 0, 5000);
+		memset(szQuery, 0, sizeof(szQuery));
 		strcpy(szQuery," insert into pdp_profile( ");
 		strcat(szQuery," profile_id, profile_name, apn, auth_type, auth_id, auth_pwd, ");
 		strcat(szQuery," pdp_protocol, proxy_ip_addr, home_url, linger_time,");
@@ -1402,7 +1404,7 @@ static gpointer __ps_context_add_context(gpointer modem, gchar *mccmnc, int prof
 	conn = _ps_modem_ref_dbusconn(modem);
 	p = _ps_modem_ref_plugin(modem);
 
-	memset(szQuery, '\0', 5000);
+	memset(szQuery, '\0', sizeof(szQuery));
 	strcpy(szQuery, "select");
 	strcat(szQuery, " a.network_info_id, a.network_name, a.mccmnc,"); //0 , 1, 2
 	strcat(szQuery, " b.profile_id, b.profile_name, b.apn, "); //3, 4, 5
@@ -1452,7 +1454,7 @@ gboolean _ps_context_reset_profile_table(void)
 	GHashTable *in_param;
 	char szQuery[5000];
 
-	memset(szQuery, '\0', 5000);
+	memset(szQuery, '\0', sizeof(szQuery));
 	strcat(szQuery, " delete from pdp_profile");
 
 	in_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
@@ -1519,7 +1521,7 @@ GHashTable* _ps_context_create_hashtable(DBusGConnection *conn, TcorePlugin *p, 
 
 	dbg("Create profile by mccmnc: [%s]", mccmnc);
 
-	memset(szQuery, '\0', 5000);
+	memset(szQuery, '\0', sizeof(szQuery));
 	strcpy(szQuery, "select");
 	strcat(szQuery, " a.network_info_id, a.network_name, a.mccmnc,"); //0 , 1, 2
 	strcat(szQuery, " b.profile_id, b.profile_name, b.apn, "); //3, 4, 5

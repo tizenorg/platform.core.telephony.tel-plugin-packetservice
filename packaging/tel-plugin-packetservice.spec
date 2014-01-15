@@ -14,6 +14,7 @@ BuildRequires:  pkgconfig(dbus-glib-1)
 BuildRequires:  pkgconfig(dlog)
 BuildRequires:  pkgconfig(tcore)
 BuildRequires:  pkgconfig(iniparser)
+BuildRequires:  pkgconfig(libtzplatform-config)
 
 %description
 Telephony Packet Service library
@@ -30,26 +31,26 @@ make %{?jobs:-j%jobs}
 /sbin/ldconfig
 
 #create db
-mkdir -p /opt/dbspace
+mkdir -p %{TZ_SYS_DB}  
 
-if [ ! -f /opt/dbspace/.dnet.db ]
+if [ ! -f %{TZ_SYS_DB}/.dnet.db ]
 then
-  sqlite3 /opt/dbspace/.dnet.db < /usr/share/ps-plugin/dnet_db.sql
-  sqlite3 /opt/dbspace/.dnet.db < /usr/share/ps-plugin/dnet_db_data.sql
+  sqlite3 %{TZ_SYS_DB}/.dnet.db < /usr/share/ps-plugin/dnet_db.sql
+  sqlite3 %{TZ_SYS_DB}/.dnet.db < /usr/share/ps-plugin/dnet_db_data.sql
 fi
 
 rm -f /usr/share/ps-plugin/dnet_db.sql
 rm -f /usr/share/ps-plugin/dnet_db_data.sql
 
 #change file permission
-if [ -f /opt/dbspace/.dnet.db ]
+if [ -f %{TZ_SYS_DB}/.dnet.db ]
 then
-  chmod 660 /opt/dbspace/.dnet.db
+  chmod 660 %{TZ_SYS_DB}/.dnet.db
 fi
 
-if [ -f /opt/dbspace/.dnet.db-journal ]
+if [ -f %{TZ_SYS_DB}/.dnet.db-journal ]
 then
-  chmod 664 /opt/dbspace/.dnet.db-journal
+  chmod 664 %{TZ_SYS_DB}/.dnet.db-journal
 fi
 
 %postun -p /sbin/ldconfig
