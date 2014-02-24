@@ -1115,7 +1115,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *profile_id;
 		gchar* item_key = NULL;
 		item_key = g_strdup_printf("connection:profile_id_%d", index);
-		profile_id = iniparser_getstr(dic, item_key);
+		profile_id = iniparser_getstring(dic, item_key, NULL);
 		g_hash_table_insert(in_param, "1", g_strdup(profile_id));
 		g_free(item_key);
 	}
@@ -1124,7 +1124,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *profile_name;
 		gchar* item_key = NULL;
 		item_key = g_strdup_printf("connection:profile_name_%d", index);
-		profile_name = iniparser_getstr(dic, item_key);
+		profile_name = iniparser_getstring(dic, item_key, NULL);
 		g_hash_table_insert(in_param, "2", g_strdup(profile_name));
 		g_free(item_key);
 	}
@@ -1133,7 +1133,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *apn;
 		gchar *item_key = NULL;
 		item_key = g_strdup_printf("connection:apn_%d", index);
-		apn = iniparser_getstr(dic, item_key);
+		apn = iniparser_getstring(dic, item_key, NULL);
 		g_hash_table_insert(in_param, "3", g_strdup(apn));
 		g_free(item_key);
 	}
@@ -1142,7 +1142,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *auth_type;
 		gchar *item_key = NULL;
 		item_key = g_strdup_printf("connection:auth_type_%d", index);
-		auth_type = iniparser_getstr(dic, item_key);
+		auth_type = iniparser_getstring(dic, item_key, NULL);
 		g_hash_table_insert(in_param, "4", g_strdup(auth_type));
 		g_free(item_key);
 	}
@@ -1151,7 +1151,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *auth_id;
 		gchar *item_key = NULL;
 		item_key = g_strdup_printf("connection:auth_id_%d", index);
-		auth_id = iniparser_getstr(dic, item_key);
+		auth_id = iniparser_getstring(dic, item_key, NULL);
 		g_hash_table_insert(in_param, "5", g_strdup(auth_id));
 		g_free(item_key);
 	}
@@ -1160,7 +1160,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *auth_pwd;
 		gchar *item_key = NULL;
 		item_key = g_strdup_printf("connection:auth_pwd_%d", index);
-		auth_pwd = iniparser_getstr(dic, item_key);
+		auth_pwd = iniparser_getstring(dic, item_key, NULL);
 		g_hash_table_insert(in_param, "6", g_strdup(auth_pwd));
 		g_free(item_key);
 	}
@@ -1169,7 +1169,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *pdp_protocol;
 		gchar *item_key = NULL;
 		item_key = g_strdup_printf("connection:pdp_protocol_%d", index);
-		pdp_protocol = iniparser_getstr(dic, item_key);
+		pdp_protocol = iniparser_getstring(dic, item_key, NULL);
 		g_hash_table_insert(in_param, "7", g_strdup(pdp_protocol));
 		g_free(item_key);
 	}
@@ -1178,7 +1178,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *proxy_ip_addr;
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:proxy_ip_addr_%d", index);
-		proxy_ip_addr = iniparser_getstr(dic, section_key);
+		proxy_ip_addr = iniparser_getstring(dic, section_key, NULL);
 		g_hash_table_insert(in_param, "8", g_strdup(proxy_ip_addr));
 		g_free(section_key);
 	}
@@ -1187,7 +1187,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *home_url;
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:home_url_%d", index);
-		home_url = iniparser_getstr(dic, section_key);
+		home_url = iniparser_getstring(dic, section_key, NULL);
 		g_hash_table_insert(in_param, "9", g_strdup(home_url));
 		g_free(section_key);
 	}
@@ -1196,7 +1196,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *linger_time;
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:linger_time_%d", index);
-		linger_time = iniparser_getstr(dic, section_key);
+		linger_time = iniparser_getstring(dic, section_key, NULL);
 		g_hash_table_insert(in_param, "10", g_strdup(linger_time));
 		g_free(section_key);
 	}
@@ -1205,7 +1205,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *traffic_class;
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:traffic_class_%d", index);
-		traffic_class = iniparser_getstr(dic, section_key);
+		traffic_class = iniparser_getstring(dic, section_key, NULL);
 		g_hash_table_insert(in_param, "11", g_strdup(traffic_class));
 		g_free(section_key);
 	}
@@ -1214,7 +1214,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *is_static_ip_addr;
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:is_static_ip_addr_%d", index);
-		is_static_ip_addr = iniparser_getstr(dic, section_key);
+		is_static_ip_addr = iniparser_getstring(dic, section_key, NULL);
 		g_hash_table_insert(in_param, "12", g_strdup(is_static_ip_addr));
 		g_free(section_key);
 	}
@@ -1223,7 +1223,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *ip_addr;
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:ip_addr_%d", index);
-		ip_addr = iniparser_getstr(dic, section_key);
+		ip_addr = iniparser_getstring(dic, section_key, NULL);
 		g_hash_table_insert(in_param, "13", g_strdup(ip_addr));
 		g_free(section_key);
 	}
@@ -1232,7 +1232,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *is_static_dns_addr;
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:is_static_dns_addr_%d", index);
-		is_static_dns_addr = iniparser_getstr(dic, section_key);
+		is_static_dns_addr = iniparser_getstring(dic, section_key, NULL);
 		g_hash_table_insert(in_param, "14", g_strdup(is_static_dns_addr));
 		g_free(section_key);
 	}
@@ -1241,7 +1241,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *dns_addr1;
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:dns_addr1_%d", index);
-		dns_addr1 = iniparser_getstr(dic, section_key);
+		dns_addr1 = iniparser_getstring(dic, section_key, NULL);
 		g_hash_table_insert(in_param, "15", g_strdup(dns_addr1));
 		g_free(section_key);
 	}
@@ -1250,7 +1250,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *dns_addr2;
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:dns_addr2_%d", index);
-		dns_addr2 = iniparser_getstr(dic, section_key);
+		dns_addr2 = iniparser_getstring(dic, section_key, NULL);
 		g_hash_table_insert(in_param, "16", g_strdup(dns_addr2));
 		g_free(section_key);
 	}
@@ -1259,7 +1259,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *network_info_id;
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:network_info_id_%d", index);
-		network_info_id = iniparser_getstr(dic, section_key);
+		network_info_id = iniparser_getstring(dic, section_key, NULL);
 		g_hash_table_insert(in_param, "17", g_strdup(network_info_id));
 		g_free(section_key);
 	}
@@ -1268,7 +1268,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *svc_category_id;
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:svc_category_id_%d", index);
-		svc_category_id = iniparser_getstr(dic, section_key);
+		svc_category_id = iniparser_getstring(dic, section_key, NULL);
 		g_hash_table_insert(in_param, "18", g_strdup(svc_category_id));
 		g_free(section_key);
 	}
@@ -1277,7 +1277,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *hidden;
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:hidden_%d", index);
-		hidden = iniparser_getstr(dic, section_key);
+		hidden = iniparser_getstring(dic, section_key, NULL);
 		g_hash_table_insert(in_param, "19", g_strdup(hidden));
 		g_free(section_key);
 	}
@@ -1286,7 +1286,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *editable;
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:editable_%d", index);
-		editable = iniparser_getstr(dic, section_key);
+		editable = iniparser_getstring(dic, section_key, NULL);
 		g_hash_table_insert(in_param, "20", g_strdup(editable));
 		g_free(section_key);
 	}
@@ -1295,7 +1295,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 		gchar *default_internet_con;
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:default_internet_con_%d", index);
-		default_internet_con = iniparser_getstr(dic, section_key);
+		default_internet_con = iniparser_getstring(dic, section_key, NULL);
 		g_hash_table_insert(in_param, "21", g_strdup(default_internet_con));
 		g_free(section_key);
 	}
