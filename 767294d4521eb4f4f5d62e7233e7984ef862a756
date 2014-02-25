@@ -1,0 +1,12 @@
+Code-Review+1: Michael Leibowitz <michael.leibowitz@intel.com>
+Code-Review+2: Jinmin Chung <jinmin@tizen.org>
+Code-Review+1: MyungJoo Ham <myungjoo.ham@samsung.com>
+Code-Review+1: Stéphane Desneux (sdesneux) <stephane.desneux@open.eurogiciel.org>
+Verified+1: Stéphane Desneux (sdesneux) <stephane.desneux@open.eurogiciel.org>
+Code-Review+1: Kévin THIERRY <kevin.thierry@open.eurogiciel.org>
+Verified+1: Nicolas Zingilé <nicolas.zingile@open.eurogiciel.org>
+Submitted-by: Jinmin Chung <jinmin@tizen.org>
+Submitted-at: Mon, 24 Feb 2014 23:25:58 -0800
+Reviewed-on: https://review.tizen.org/gerrit/16734
+Project: platform/core/telephony/tel-plugin-packetservice
+Branch: refs/heads/tizen
