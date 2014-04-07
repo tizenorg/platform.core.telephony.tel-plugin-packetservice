@@ -1,6 +1,10 @@
+%define major 3
+%define minor 0
+%define patchlevel 1
+
 Name:       tel-plugin-packetservice
 Summary:    Telephony Packet Service library
-Version:    0.1.34
+Version:    %{major}.%{minor}.%{patchlevel}
 Release:    1
 Group:      System/Libraries
 License:    Apache-2.0

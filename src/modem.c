@@ -1,9 +1,7 @@
 /*
  * tel-plugin-packetservice
  *
- * Copyright (c) 2012 Samsung Electronics Co., Ltd. All rights reserved.
- *
- * Contact: DongHoo Park <donghoo.park@samsung.com>
+ * Copyright (c) 2013 Samsung Electronics Co. Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,27 +14,26 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
-#include "ps-modem.h"
-
-#include "ps.h"
-#include "ps-error.h"
-
+#include <glib.h>
+#include <tcore.h>
 #include <server.h>
 #include <plugin.h>
 #include <core_object.h>
 
+#include "ps-modem.h"
+#include "packet-services.h"
+#include "ps-error.h"
+
 #define PROP_DEFAULT	FALSE
 #define PROP_DEFAULT_STR   NULL
-#define BOOL2STRING(a)	((a==TRUE) ? ("TRUE"):("FALSE"))
+#define BOOL2STRING(a)	((a == TRUE) ? ("TRUE"):("FALSE"))
 
 /*Properties*/
 
 enum {
 	PROP_MODEM_O,
-
 	PROP_MODEM_PATH,
 	PROP_MODEM_MASTER,
 	PROP_MODEM_PLUGIN,
@@ -194,7 +191,7 @@ static void __ps_modem_get_property(GObject *object, guint prop_id, GValue *valu
 }
 
 static void __ps_modem_set_property(GObject *object, guint prop_id, const GValue *value,
-		GParamSpec *pspec)
+	GParamSpec *pspec)
 {
 	PsModem *modem = PS_MODEM(object);
 
@@ -202,32 +199,32 @@ static void __ps_modem_set_property(GObject *object, guint prop_id, const GValue
 		case PROP_MODEM_PATH: {
 			if (modem->path) g_free(modem->path);
 			modem->path = g_value_dup_string(value);
-			msg("	modem(%p) set path(%s)", modem, modem->path);
+			dbg("modem(%p) set path(%s)", modem, modem->path);
 		}
-			break;
+		break;
 		case PROP_MODEM_MASTER: {
 			modem->p_master = g_value_get_pointer(value);
-			msg("	modem(%p) set master(%p)", modem, modem->p_master);
+			dbg("modem(%p) set master(%p)", modem, modem->p_master);
 		}
-			break;
+		break;
 		case PROP_MODEM_PLUGIN: {
 			modem->plg = g_value_get_pointer(value);
-			msg("	modem(%p) set plg(%p)", modem, modem->plg);
+			dbg("modem(%p) set plg(%p)", modem, modem->plg);
 		}
-			break;
+		break;
 		case PROP_MODEM_COMODEM: {
 			modem->co_modem = g_value_get_pointer(value);
-			msg("	modem(%p) set coreobject modem(%p)", modem, modem->co_modem);
+			dbg("modem(%p) set coreobject modem(%p)", modem, modem->co_modem);
 		}
-			break;
+		break;
 		case PROP_MODEM_CONN: {
 			modem->conn = g_value_get_boxed(value);
-			msg("	modem(%p) set conn(%p)", modem, modem->conn);
+			dbg("modem(%p) set conn(%p)", modem, modem->conn);
 		}
-			break;
+		break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
-			break;
+		break;
 	} //swtich end
 
 	return;
@@ -345,7 +342,7 @@ static void __remove_service(gpointer data)
 }
 
 static void __ps_modem_create_service(DBusGConnection *conn, TcorePlugin *p,
-		gpointer modem, CoreObject *co_modem)
+	gpointer modem, CoreObject *co_modem)
 {
 	gchar *t_path = NULL;
 	GObject *object = NULL;
@@ -410,7 +407,8 @@ static gboolean __ps_modem_set_powered(PsModem *modem, gboolean value)
 	return TRUE;
 }
 
-static gboolean __ps_modem_set_sim_complete(PsModem *modem, gboolean value, gchar *operator)
+static gboolean __ps_modem_set_sim_complete(PsModem *modem, gboolean value,
+	gchar *operator)
 {
 	g_return_val_if_fail(modem != NULL, FALSE);
 
@@ -451,10 +449,10 @@ static void __ps_modem_get_ps_setting_from_storage(GObject *object)
 	dbg("Extract PS settings");
 
 	modem = (PsModem *) object;
-	key_3g_enable = _ps_master_get_storage_value(modem->p_master, KEY_3G_ENABLE);
-	key_roaming_allowed = _ps_master_get_storage_value(modem->p_master, KEY_DATA_ROAMING_SETTING);
-	msg("	Data allowed: [%s]", key_3g_enable ? "YES" : "NO");
-	msg("	Roaming allowed: [%s]", key_roaming_allowed ? "YES" : "NO");
+	key_3g_enable = _ps_master_get_storage_value(modem->p_master, STORAGE_KEY_DATA_ENABLE);
+	key_roaming_allowed = _ps_master_get_storage_value(modem->p_master, STORAGE_KEY_SETAPPL_STATE_DATA_ROAMING);
+	dbg("Data allowed: [%s]", key_3g_enable ? "YES" : "NO");
+	dbg("Roaming allowed: [%s]", key_roaming_allowed ? "YES" : "NO");
 
 	/* Set Data allowed value */
 	_ps_modem_set_data_allowed(modem, key_3g_enable);
@@ -471,8 +469,10 @@ static void __ps_modem_processing_modem_event(gpointer object)
 
 	g_return_if_fail(modem != NULL);
 
-	if(!modem->services)
+	if(!modem->services) {
+		err("null services");
 		return;
+	}
 
 	g_hash_table_iter_init(&iter, modem->services);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
@@ -481,7 +481,7 @@ static void __ps_modem_processing_modem_event(gpointer object)
 		s_roaming = _ps_service_get_roaming(value);
 		_ps_update_cellular_state_key(value);
 
-		if(!modem->powered){
+		if (!modem->powered){
 			dbg("modem is not powered");
 			_ps_service_remove_contexts(value);
 			_ps_free_co_ps_event(value);
@@ -490,7 +490,7 @@ static void __ps_modem_processing_modem_event(gpointer object)
 			continue;
 		}
 
-		if(modem->flight_mode
+		if (modem->flight_mode
 				|| !modem->data_allowed
 				|| (s_roaming && !modem->roaming_allowed) ){
 			_ps_service_disconnect_contexts(value);
@@ -542,7 +542,7 @@ gpointer _ps_modem_create_modem(DBusGConnection *conn, TcorePlugin *p, gpointer 
 	_ps_get_co_modem_values(object);
 
 	dbus_g_connection_register_g_object(conn, modem_name, object);
-	msg("	modem(%p) register dbus path(%s)", object, modem_name);
+	dbg("modem(%p) register dbus path(%s)", object, modem_name);
 
 	return object;
 }
@@ -673,7 +673,7 @@ gboolean _ps_modem_set_data_roaming_allowed(gpointer object, gboolean roaming_al
 	dbg("modem(%p) roaming allowed(%d)", modem, modem->roaming_allowed);
 	__ps_modem_emit_property_changed_signal(modem);
 
-	if(!modem->services)
+	if (!modem->services)
 		return TRUE;
 
 	g_hash_table_iter_init(&iter, modem->services);
@@ -682,7 +682,7 @@ gboolean _ps_modem_set_data_roaming_allowed(gpointer object, gboolean roaming_al
 		break;
 	}
 
-	if(s_roaming)
+	if (s_roaming)
 		__ps_modem_processing_modem_event(modem);
 
 	return TRUE;
@@ -744,13 +744,13 @@ gboolean _ps_modem_get_properties(gpointer object, GHashTable *properties)
 	g_hash_table_insert(properties, "roaming_allowed", BOOL2STRING(modem->roaming_allowed));
 	g_hash_table_insert(properties, "data_allowed", BOOL2STRING(modem->data_allowed));
 
-	msg("	Path: [%s]", modem->path);
-	msg("	Operator: [%s]", modem->operator);
-	msg("	Powered: [%s]", modem->powered ? "YES" : "NO");
-	msg("	SIM Init: [%s]", modem->sim_init ? "YES" : "NO");
-	msg("	Flight mode: [%s]", modem->flight_mode ? "ON" : "OFF");
-	msg("	Roaming allowed: [%s]", modem->roaming_allowed ? "YES" : "NO");
-	msg("	Data allowed: [%s]", modem->data_allowed ? "YES" : "NO");
+	dbg("Path: [%s]", modem->path);
+	dbg("Operator: [%s]", modem->operator);
+	dbg("Powered: [%s]", modem->powered ? "YES" : "NO");
+	dbg("SIM Init: [%s]", modem->sim_init ? "YES" : "NO");
+	dbg("Flight mode: [%s]", modem->flight_mode ? "ON" : "OFF");
+	dbg("Roaming allowed: [%s]", modem->roaming_allowed ? "YES" : "NO");
+	dbg("Data allowed: [%s]", modem->data_allowed ? "YES" : "NO");
 
 	return TRUE;
 }

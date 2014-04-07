@@ -1,9 +1,7 @@
 /*
  * tel-plugin-packetservice
  *
- * Copyright (c) 2012 Samsung Electronics Co., Ltd. All rights reserved.
- *
- * Contact: DongHoo Park <donghoo.park@samsung.com>
+ * Copyright (c) 2013 Samsung Electronics Co. Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +14,13 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
-#include "ps-context.h"
-
-#include "ps.h"
-#include "ps-error.h"
+#include <glib.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <iniparser.h>
+#include <tzplatform_config.h>
 
 #include <tcore.h>
 #include <plugin.h>
@@ -31,20 +29,17 @@
 #include <core_object.h>
 #include <co_context.h>
 
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
-#include <iniparser.h>
-#include <tzplatform_config.h>
+#include "ps-context.h"
+#include "packet-services.h"
+#include "ps-error.h"
 
 #define PROP_DEFAULT		FALSE
 #define PROP_DEFAULT_STR	NULL
-#define BOOL2STRING(a)		((a==TRUE) ? ("TRUE"):("FALSE"))
+#define BOOL2STRING(a)		((a == TRUE) ? ("TRUE"):("FALSE"))
 
 /*Properties*/
 enum {
 	PROP_CONTEXT_O,
-
 	PROP_CONTEXT_PATH,
 	PROP_CONTEXT_CONN,
 	PROP_CONTEXT_PLUGIN,
@@ -79,47 +74,49 @@ struct PsContext {
 	gboolean editable;
 	gboolean ps_defined;
 	gpointer p_service;
-	int profile_id;
+	gint profile_id;
 	CoreObject *co_context;
 };
 
-static Storage *strg_db;
+static TcoreStorage *strg_db;
 static gpointer handle;
 static GHashTable *contexts;
 
 G_DEFINE_TYPE(PsContext, ps_context, G_TYPE_OBJECT);
 
-static void     __ps_context_set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec);
-static void     __ps_context_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
+gboolean ps_iface_context_get_properties(PsContext *pscontext, DBusGMethodInvocation *context);
+gboolean ps_iface_context_get_profile(PsContext *pscontext, DBusGMethodInvocation *context);
+gboolean ps_iface_context_activate(PsContext *pscontext, DBusGMethodInvocation *context);
+gboolean ps_iface_context_deactivate(PsContext *pscontext, DBusGMethodInvocation *context);
+gboolean ps_iface_context_set_default_connection(PsContext *pscontext, gboolean* result,
+	GError **error);
+gboolean ps_iface_context_modify_profile(PsContext *pscontext, GHashTable *profile_property,
+	gboolean* result, GError **error);
+gboolean ps_iface_context_remove_profile(PsContext *pscontext, gboolean* result, GError **error);
 
-gboolean        ps_iface_context_get_properties(PsContext *pscontext, DBusGMethodInvocation *context);
-gboolean        ps_iface_context_get_profile(PsContext *pscontext, DBusGMethodInvocation *context);
-gboolean        ps_iface_context_activate(PsContext *pscontext, DBusGMethodInvocation *context);
-gboolean        ps_iface_context_deactivate(PsContext *pscontext, DBusGMethodInvocation *context);
-gboolean        ps_iface_context_set_default_connection(PsContext *pscontext, gboolean* result, GError **error);
-gboolean        ps_iface_context_modify_profile(PsContext *pscontext, GHashTable *profile_property, gboolean* result, GError **error);
-gboolean        ps_iface_context_remove_profile(PsContext *pscontext, gboolean* result, GError **error);
-
-static void     __ps_context_emit_property_changed_signal(PsContext *context);
-
-static void     __remove_context(gpointer data);
+static void __ps_context_set_property(GObject *object, guint prop_id, const GValue *value,
+	GParamSpec *pspec);
+static void __ps_context_get_property(GObject *object, guint prop_id, GValue *value,
+	GParamSpec *pspec);
+static void __ps_context_emit_property_changed_signal(PsContext *context);
+static void __remove_context(gpointer data);
 static gboolean __remove_contexts(gpointer key, gpointer value, gpointer user_data);
 static gboolean __ps_context_remove_context(gpointer context);
 static gboolean __ps_context_create_storage_handle(gpointer plugin);
 static gboolean __ps_context_create_context_hash(void);
-static gchar*   __ps_context_create_path(char *profile_name, int profile_id, int svc_ctg_id);
+static gchar*   __ps_context_create_path(char *profile_name, gint profile_id, gint svc_ctg_id);
 static gboolean __ps_context_create_co_context(gpointer context, GHashTable *property);
 static gboolean __ps_context_update_profile(PsContext *context, GHashTable *property);
 static gboolean __ps_context_update_database(PsContext *context);
 static gboolean __ps_context_update_default_internet_to_db(PsContext *context, gboolean enabled);
 static gboolean __ps_context_remove_database(PsContext *context);
-static int      __ps_context_insert_network_id_to_database(gchar *mccmnc);
-static int      __ps_context_load_network_id_from_database(gchar *mccmnc);
-static gchar*   __ps_context_load_network_name_from_database(int network_id);
-static int      __ps_context_load_profile_id_from_database(void);
-static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index);
-static int      __ps_context_insert_profile_to_database(GHashTable *property, int network_id);
-static int      __ps_context_get_network_id(gchar *mccmnc);
+static gint      __ps_context_insert_network_id_to_database(gchar *mccmnc);
+static gint      __ps_context_load_network_id_from_database(gchar *mccmnc);
+static gchar*   __ps_context_load_network_name_from_database(gint network_id);
+static gint      __ps_context_load_profile_id_from_database(void);
+static gboolean __ps_context_insert_profile_tuple(dictionary *dic, gint index);
+static gint      __ps_context_insert_profile_to_database(GHashTable *property, gint network_id);
+static gint      __ps_context_get_network_id(gchar *mccmnc);
 static gboolean __ps_context_get_profile_properties(gpointer context, GHashTable *properties);
 static gboolean __ps_context_set_default_connection_enable(gpointer object, gboolean enabled);
 
@@ -164,16 +161,19 @@ static void ps_context_class_init(PsContextClass *klass)
 			PROP_CONTEXT_CONN,
 			g_param_spec_boxed("conn", "CONNECTION", "DBus connection", DBUS_TYPE_G_CONNECTION,
 					G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+
 	g_object_class_install_property(
 			object_class,
 			PROP_CONTEXT_PATH,
 			g_param_spec_string("path", "PATH", "Context Path", PROP_DEFAULT_STR,
 					G_PARAM_READWRITE));
+
 	g_object_class_install_property(
 			object_class,
 			PROP_CONTEXT_MCCMNC,
 			g_param_spec_string("mccmnc", "MCCMNC", "Profile Country and Context Provider Code",
 					PROP_DEFAULT_STR, G_PARAM_READWRITE | G_PARAM_CONSTRUCT));
+
 	g_object_class_install_property(
 			object_class,
 			PROP_CONTEXT_PLUGIN,
@@ -189,47 +189,48 @@ static void ps_context_class_init(PsContextClass *klass)
 	return;
 }
 
-static void __ps_context_set_property(GObject *object, guint prop_id, const GValue *value,
-		GParamSpec *pspec)
+static void __ps_context_set_property(GObject *object, guint prop_id,
+	const GValue *value, GParamSpec *pspec)
 {
 	PsContext *context = PS_CONTEXT(object);
 
 	switch (prop_id) {
 		case PROP_CONTEXT_CONN: {
 			context->conn = g_value_get_boxed(value);
-			msg("context (%p) set conn(%p)", context, context->conn);
+			dbg("context (%p) set conn(%p)", context, context->conn);
 		}
-			break;
+		break;
 		case PROP_CONTEXT_PLUGIN: {
 			context->plg = g_value_get_pointer(value);
-			msg("context (%p) set plg(%p)", context, context->plg);
+			dbg("context (%p) set plg(%p)", context, context->plg);
 		}
-			break;
+		break;
 		case PROP_CONTEXT_PATH: {
 			if (context->path) {
 				g_free(context->path);
 			}
 			context->path = g_value_dup_string(value);
-			msg("context (%p) path(%s)", context, context->path);
+			dbg("context (%p) path(%s)", context, context->path);
 		}
-			break;
+		break;
 		case PROP_CONTEXT_MCCMNC: {
 			if (context->mccmnc) {
 				g_free(context->mccmnc);
 			}
 			context->mccmnc = g_value_dup_string(value);
-			msg("context (%p) mccmnc(%s)", context, context->mccmnc);
+			dbg("context (%p) mccmnc(%s)", context, context->mccmnc);
 		}
-			break;
+		break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
-			break;
+		break;
 	} //end of switch
 
 	return;
 }
 
-static void __ps_context_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+static void __ps_context_get_property(GObject *object, guint prop_id, GValue *value,
+	GParamSpec *pspec)
 {
 	return;
 }
@@ -274,8 +275,8 @@ gboolean ps_iface_context_get_profile(PsContext *pscontext, DBusGMethodInvocatio
 
 gboolean ps_iface_context_activate(PsContext *pscontext, DBusGMethodInvocation *context)
 {
-	int rv = 0;
-	int context_state = 0;
+	gint rv = 0;
+	TcoreContextState context_state;
 	GError *error = NULL;
 
 	dbg("Activate context - Path: [%s]", _ps_context_ref_path(pscontext));
@@ -288,7 +289,7 @@ gboolean ps_iface_context_activate(PsContext *pscontext, DBusGMethodInvocation *
 
 	/* Service Activate context */
 	rv = _ps_service_activate_context(pscontext->p_service, pscontext);
-	if (rv != TCORE_RETURN_SUCCESS) {
+	if (rv != TEL_RETURN_SUCCESS) {
 		err("Context Activation - FAIL");
 		g_set_error(&error, PS_ERROR, PS_ERR_TRASPORT, "fail to activate context err(%d)", rv);
 		goto FAIL;
@@ -298,8 +299,8 @@ gboolean ps_iface_context_activate(PsContext *pscontext, DBusGMethodInvocation *
 	dbus_g_method_return(context, pscontext->path);
 
 	/* Get context State, Set connected if it is already Activated */
-	context_state = tcore_context_get_state(pscontext->co_context);
-	if (context_state == CONTEXT_STATE_ACTIVATED) {
+	tcore_context_get_state(pscontext->co_context, &context_state);
+	if (context_state == TCORE_CONTEXT_STATE_ACTIVATED) {
 		dbg("Conetxt State - Already connected");
 		_ps_context_set_connected(pscontext, TRUE);
 	}
@@ -307,14 +308,15 @@ gboolean ps_iface_context_activate(PsContext *pscontext, DBusGMethodInvocation *
 	return TRUE;
 
 FAIL:
+	err("Failed  to Activate context");
 	dbus_g_method_return_error(context, error);
-	return TRUE;
+	return FALSE;
 }
 
 gboolean ps_iface_context_deactivate(PsContext *pscontext, DBusGMethodInvocation *context)
 {
-	int rv = 0;
-	int context_state = 0;
+	gboolean rv = 0;
+	TcoreContextState context_state = 0;
 	GError *error = NULL;
 
 	dbg("deactivate context(%s)", _ps_context_ref_path(pscontext));
@@ -322,17 +324,18 @@ gboolean ps_iface_context_deactivate(PsContext *pscontext, DBusGMethodInvocation
 	_ps_service_reset_connection_timer(pscontext);
 	_ps_context_set_alwayson_enable(pscontext, FALSE);
 	rv = _ps_service_deactivate_context(pscontext->p_service, pscontext);
-	if (rv != TCORE_RETURN_SUCCESS) {
-		dbg("fail to deactivate context connection");
-		g_set_error(&error, PS_ERROR, PS_ERR_TRASPORT, "fail to deactivate context err(%d)", rv);
+	if (rv != TRUE) {
+		err("fail to deactivate context connection");
+		g_set_error(&error, PS_ERROR, PS_ERR_TRASPORT,
+			"fail to deactivate context err(%d)", rv);
 		goto FAIL;
 	}
 
 	dbg("success to deactivate context");
 	dbus_g_method_return(context, pscontext->path);
 
-	context_state =  tcore_context_get_state(pscontext->co_context);
-	if (context_state == CONTEXT_STATE_DEACTIVATED) {
+	tcore_context_get_state(pscontext->co_context, &context_state);
+	if (context_state == TCORE_CONTEXT_STATE_DEACTIVATED) {
 		dbg("context is already disconnected");
 		_ps_context_set_connected(pscontext, FALSE);
 	}
@@ -340,23 +343,24 @@ gboolean ps_iface_context_deactivate(PsContext *pscontext, DBusGMethodInvocation
 	return TRUE;
 
 FAIL:
+	err("failed  to deactivate context");
 	dbus_g_method_return_error(context, error);
-	return TRUE;
+	return FALSE;
 }
 
-gboolean ps_iface_context_set_default_connection(PsContext *pscontext, gboolean* result, GError **error)
+gboolean ps_iface_context_set_default_connection(PsContext *pscontext, gboolean* result,
+	GError **error)
 {
-/*
- * if current default and target profile is the same, just return success
- *
- * in different case, current connection should be diconnected, and trying to connection new one
- */
-	int role = CONTEXT_ROLE_UNKNOWN;
+	/*
+	* if current default and target profile is the same, just return success
+	* in different case, current connection should be diconnected, and trying to connection new one
+	*/
+	TcoreContextRole role;
 	gpointer cur_default_ctx = NULL;
 	gpointer service = NULL;
 
-	role = tcore_context_get_role(pscontext->co_context);
-	if(role != CONTEXT_ROLE_INTERNET){
+	tcore_context_get_role(pscontext->co_context, &role);
+	if(role != TCORE_CONTEXT_ROLE_INTERNET){
 		dbg("only internet profile type can be set to default internet profile");
 		*result = FALSE;
 		return TRUE;
@@ -394,10 +398,10 @@ gboolean ps_iface_context_set_default_connection(PsContext *pscontext, gboolean*
 }
 
 gboolean ps_iface_context_modify_profile(PsContext *context, GHashTable *profile_property,
-		gboolean* result, GError **error)
+	gboolean* result, GError **error)
 {
 	gboolean rv = FALSE;
-	int context_state = 0;
+	TcoreContextState context_state;
 
 	*result = TRUE;
 	dbg("modify context's profile properties");
@@ -409,17 +413,16 @@ gboolean ps_iface_context_modify_profile(PsContext *context, GHashTable *profile
 		return TRUE;
 	}
 
-	context_state = tcore_context_get_state(context->co_context);
-	if (context_state == CONTEXT_STATE_DEACTIVATED)
+	tcore_context_get_state(context->co_context, &context_state);
+	if (context_state == TCORE_CONTEXT_STATE_DEACTIVATED)
 		return TRUE;
 
 	_ps_service_deactivate_context(context->p_service, context);
-	context_state = tcore_context_get_state(context->co_context);
-	if (context_state == CONTEXT_STATE_DEACTIVATED) {
+	 tcore_context_get_state(context->co_context, &context_state);
+	if (context_state == TCORE_CONTEXT_STATE_DEACTIVATED) {
 		dbg("context is already disconnected");
 		_ps_context_set_connected(context, FALSE);
 	}
-
 	return TRUE;
 }
 
@@ -429,11 +432,9 @@ gboolean ps_iface_context_remove_profile(PsContext *context, gboolean* result, G
 	gboolean rv = FALSE;
 
 	ctx_path = g_strdup(_ps_context_ref_path(context));
-
 	__ps_context_remove_database(context);
 	rv = __ps_context_remove_context(context);
 	g_hash_table_remove(contexts, ctx_path);
-
 	*result = rv;
 	g_free(ctx_path);
 	return TRUE;
@@ -455,7 +456,8 @@ static gboolean __remove_contexts(gpointer key, gpointer value, gpointer user_da
 
 gboolean _ps_context_remove_context(gpointer context)
 {
-	dbus_g_connection_unregister_g_object(((PsContext *)context)->conn, (GObject *) context);
+	dbus_g_connection_unregister_g_object(((PsContext *)context)->conn,
+		(GObject *) context);
 	g_hash_table_remove(contexts, _ps_context_ref_path(context));
 	g_object_unref(context);
 	return TRUE;
@@ -467,7 +469,8 @@ static gboolean __ps_context_remove_context(gpointer context)
 
 	_ps_service_reset_connection_timer(context);
 
-	dbus_g_connection_unregister_g_object(((PsContext *)context)->conn, (GObject *) context);
+	dbus_g_connection_unregister_g_object(((PsContext *)context)->conn,
+		(GObject *) context);
 
 	_ps_context_set_alwayson_enable(context, FALSE);
 	_ps_service_deactivate_context(((PsContext *)context)->p_service, context);
@@ -482,16 +485,16 @@ static gboolean __ps_context_remove_context(gpointer context)
 
 static gboolean __ps_context_create_storage_handle(gpointer plugin)
 {
-	TcorePlugin *p = plugin;
-	Server *s = tcore_plugin_ref_server(p);
+	Server *s = tcore_plugin_ref_server((TcorePlugin *)plugin);
 	const char *path = NULL;
 	strg_db = tcore_server_find_storage(s, "database");
 	path = tzplatform_mkpath(TZ_SYS_DB,".dnet.db");
 
 	handle = tcore_storage_create_handle(strg_db, path);
-	if (!handle)
+	if (!handle) {
 		err("fail to create database handle");
-
+		return FALSE;
+	}
 	dbg("storage(%p) handle (%p)", strg_db, handle);
 	return TRUE;
 }
@@ -510,7 +513,8 @@ static gboolean __ps_context_create_context_hash()
 	return TRUE;
 }
 
-static gchar* __ps_context_create_path(char *profile_name, int profile_id, int svc_ctg_id)
+static gchar* __ps_context_create_path(char *profile_name, gint profile_id,
+	gint svc_ctg_id)
 {
 	gchar **strv, *str, *path;
 	gchar *delimiters = " !\"#$%&\'()*+,-./:;<=>?@[\\]^`{|}~";
@@ -532,13 +536,12 @@ static gboolean __ps_context_create_co_context(gpointer object, GHashTable *prop
 	gpointer key, value;
 	PsContext *context = NULL;
 	CoreObject *co_context = NULL;
-
 	gchar *path = NULL;
-	int profile_id = 0;
+	gint profile_id = 0;
 	gchar *profile_name = NULL;
 	gchar *apn = NULL;
 	gchar *auth_id = NULL, *auth_pwd = NULL, *home_url = NULL, *proxy_addr = NULL;
-	int auth_type = 0,svc_ctg_id = 0;
+	gint auth_type = 0,svc_ctg_id = 0;
 	gboolean hidden = FALSE, editable = FALSE, default_conn = FALSE;
 
 	dbg("Create context");
@@ -548,48 +551,37 @@ static gboolean __ps_context_create_co_context(gpointer object, GHashTable *prop
 		if (g_str_equal(key, "3") == TRUE) { /*Profile ID*/
 			profile_id = atoi((const char*) value);
 			dbg("profile id (%d)", profile_id);
-		}
-		else if (g_str_equal(key, "4") == TRUE) {
+		} else if (g_str_equal(key, "4") == TRUE) {
 			profile_name = g_strdup((const char*) value);
 			dbg("profile name (%s)", profile_name);
-		}
-		else if (g_str_equal(key, "5") == TRUE) {
+		} else if (g_str_equal(key, "5") == TRUE) {
 			apn = g_strdup((const char*) value);
 			dbg("APN (%s)", apn);
-		}
-		else if (g_str_equal(key, "6") == TRUE) {
+		} else if (g_str_equal(key, "6") == TRUE) {
 			auth_type = atoi((const char*) value);
 			dbg("auth type (%d)", auth_type);
-		}
-		else if (g_str_equal(key, "7") == TRUE) {
+		} else if (g_str_equal(key, "7") == TRUE) {
 			auth_id = g_strdup((const char*) value);
 			dbg("auth id (%s)", auth_id);
-		}
-		else if (g_str_equal(key, "8") == TRUE) {
+		} else if (g_str_equal(key, "8") == TRUE) {
 			auth_pwd = g_strdup((const char*) value);
 			dbg("auth pwd (%s)", auth_pwd);
-		}
-		else if (g_str_equal(key, "9") == TRUE) {
+		} else if (g_str_equal(key, "9") == TRUE) {
 			proxy_addr = g_strdup((const char*) value);
 			dbg("proxy addr (%s)", proxy_addr);
-		}
-		else if (g_str_equal(key, "10") == TRUE) {
+		} else if (g_str_equal(key, "10") == TRUE) {
 			home_url = g_strdup((const char*) value);
 			dbg("home url (%s)", home_url);
-		}
-		else if (g_str_equal(key, "19") == TRUE) {
+		} else if (g_str_equal(key, "19") == TRUE) {
 			svc_ctg_id = atoi((const char*) value);
 			dbg("context category type (%d)", svc_ctg_id);
-		}
-		else if (g_str_equal(key, "20") == TRUE) {
+		} else if (g_str_equal(key, "20") == TRUE) {
 			hidden = atoi((const char*) value);
 			dbg("hidden profile (%d)", hidden);
-		}
-		else if (g_str_equal(key, "21") == TRUE) {
+		} else if (g_str_equal(key, "21") == TRUE) {
 			editable = atoi((const char*) value);
 			dbg("editable profile (%d)", editable);
-		}
-		else if (g_str_equal(key, "22") == TRUE) {
+		} else if (g_str_equal(key, "22") == TRUE) {
 			default_conn = atoi((const char*) value);
 			dbg("default connection profile (%d)", default_conn);
 		}
@@ -599,7 +591,7 @@ static gboolean __ps_context_create_co_context(gpointer object, GHashTable *prop
 
 	context = (PsContext *) object;
 	co_context = tcore_context_new(context->plg, NULL);
-	tcore_context_set_state(co_context, CONTEXT_STATE_DEACTIVATED);
+	tcore_context_set_state(co_context, TCORE_CONTEXT_STATE_DEACTIVATED);
 	tcore_context_set_role(co_context, svc_ctg_id);
 	tcore_context_set_apn(co_context, apn);
 	tcore_context_set_auth(co_context, auth_type);
@@ -616,21 +608,24 @@ static gboolean __ps_context_create_co_context(gpointer object, GHashTable *prop
 	context->path = g_strdup(path);
 	context->co_context = co_context;
 
-	msg("	Profile ID: [%d]", context->profile_id);
-	msg("	Profile Hidden: [%d]", (context->hidden ? "YES" : "NO"));
-	msg("	Profile Editable: [%d]", (context->editable ? "YES" : "NO"));
-	msg("	Profile - Default Internet: [%s]",
-			(context->default_internet ? "YES" : "NO"));
-	msg("	Path: [%s]", context->path);
-	msg("	Context: [0x%x]", context->co_context);
+	dbg("Profile ID:[%d], Profile Hidden:[%s], Profile Editable: [%s]," \
+			"Profile - Default Internet:[%s], Path: [%s], Context: [0x%x]",
+			context->profile_id, (context->hidden ? "YES" : "NO"),
+			(context->editable ? "YES" : "NO"), (context->default_internet ? "YES" : "NO"),
+			context->path, context->co_context);
 
 	/* Free memory */
-	g_free(path);
+	g_free(apn);
+	g_free(auth_id);
+	g_free(auth_pwd);
+	g_free(proxy_addr);
+	g_free(home_url);
+	g_free(profile_name);
 	return TRUE;
 }
 
 static gpointer __ps_context_create_context(DBusGConnection *conn, TcorePlugin *p,
-		gchar *mccmnc, GHashTable *property)
+	gchar *mccmnc, GHashTable *property)
 {
 	guint rv = 0;
 	GError *error = NULL;
@@ -654,7 +649,7 @@ static gpointer __ps_context_create_context(DBusGConnection *conn, TcorePlugin *
 	path = _ps_context_ref_path(object);
 
 	dbus_g_connection_register_g_object(conn, g_strdup(path), object);
-	msg("context(%p) register dbus path(%s)", object, path);
+	dbg("context(%p) register dbus path(%s)", object, path);
 
 	return object;
 }
@@ -666,30 +661,27 @@ static gboolean __ps_context_update_profile(PsContext *context, GHashTable *prop
 	gpointer key, value;
 
 	co_context = context->co_context;
-	if (!co_context)
+	if (!co_context) {
+		err("invalid context");
 		return FALSE;
+	}
 
 	g_hash_table_iter_init(&iter, property);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 		if (g_str_equal(key, "apn") == TRUE) {
-			tcore_context_set_apn(co_context, (const char *) value);
-		}
-		else if (g_str_equal(key, "auth_type") == TRUE) {
-			int i_tmp = 0;
+			tcore_context_set_apn(co_context, (const gchar *) value);
+		} else if (g_str_equal(key, "auth_type") == TRUE) {
+			gint i_tmp = 0;
 			i_tmp = atoi((const char *) value);
 			tcore_context_set_auth(co_context, i_tmp);
-		}
-		else if (g_str_equal(key, "auth_id") == TRUE) {
-			tcore_context_set_username(co_context, (const char *) value);
-		}
-		else if (g_str_equal(key, "auth_pwd") == TRUE) {
-			tcore_context_set_password(co_context, (const char *) value);
-		}
-		else if (g_str_equal(key, "proxy_addr") == TRUE) {
-			tcore_context_set_proxy(co_context, (const char *) value);
-		}
-		else if (g_str_equal(key, "home_url") == TRUE) {
-			tcore_context_set_mmsurl(co_context, (const char *) value);
+		} else if (g_str_equal(key, "auth_id") == TRUE) {
+			tcore_context_set_username(co_context, (const gchar *) value);
+		} else if (g_str_equal(key, "auth_pwd") == TRUE) {
+			tcore_context_set_password(co_context, (const gchar *) value);
+		} else if (g_str_equal(key, "proxy_addr") == TRUE) {
+			tcore_context_set_proxy(co_context, (const gchar *) value);
+		} else if (g_str_equal(key, "home_url") == TRUE) {
+			tcore_context_set_mmsurl(co_context, (const gchar *) value);
 		}
 	}
 
@@ -700,14 +692,14 @@ static gboolean __ps_context_update_default_internet_to_db(PsContext *context, g
 {
 	gchar *s_id = NULL, *s_enabled = NULL;
 	gboolean rv = FALSE;
-	char szQuery[3000];
+	gchar query[3000];
 
 	GHashTable *in_param;
 	in_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
 
-	strcpy(szQuery, " update pdp_profile set ");
-	strcat(szQuery, " default_internet_con = ?");
-	strcat(szQuery, " where profile_id = ?");
+	strcpy(query, " update pdp_profile set ");
+	strcat(query, " default_internet_con = ?");
+	strcat(query, " where profile_id = ?");
 
 	s_id = g_strdup_printf("%d", context->profile_id);
 	s_enabled = g_strdup_printf("%d", enabled);
@@ -715,7 +707,7 @@ static gboolean __ps_context_update_default_internet_to_db(PsContext *context, g
 	g_hash_table_insert(in_param, "1", g_strdup(s_enabled));
 	g_hash_table_insert(in_param, "2", g_strdup(s_id));
 
-	rv = tcore_storage_update_query_database(strg_db, handle, szQuery, in_param);
+	rv = tcore_storage_update_query_database(strg_db, handle, query, in_param);
 	g_hash_table_destroy(in_param);
 
 	g_free(s_id);
@@ -727,27 +719,32 @@ static gboolean __ps_context_update_default_internet_to_db(PsContext *context, g
 static gboolean __ps_context_update_database(PsContext *context)
 {
 	gchar *s_id = NULL, *s_authtype = NULL;
-	gchar *s_apn = NULL, *s_username = NULL, *s_pwd = NULL, *s_proxy = NULL, *s_mms = NULL;
+	gchar *s_apn = NULL, *s_username = NULL;
+	gchar *s_pwd = NULL, *s_proxy = NULL, *s_mms = NULL;
 	gboolean rv = FALSE;
-	char szQuery[3000];
-
+	gchar query[3000];
 	GHashTable *in_param;
+	TcoreContextAuth auth;
+	dbg("Entered");
 	in_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
 
-	strcpy(szQuery, " update pdp_profile set ");
-	strcat(szQuery, " apn = ?, auth_type = ?, auth_id = ?, auth_pwd = ?, ");
-	strcat(szQuery, " proxy_ip_addr = ?, home_url = ?");
-	strcat(szQuery, " where profile_id = ?");
+	strcpy(query, " update pdp_profile set ");
+	strcat(query, " apn = ?, auth_type = ?, auth_id = ?, auth_pwd = ?, ");
+	strcat(query, " proxy_ip_addr = ?, home_url = ?");
+	strcat(query, " where profile_id = ?");
 
+	dbg("Get profile parameters");
 	s_id = g_strdup_printf("%d", context->profile_id);
-	s_authtype = g_strdup_printf("%d", tcore_context_get_auth(context->co_context));
+	tcore_context_get_auth(context->co_context, &auth);
+	s_authtype = g_strdup_printf("%d", auth);
 
-	s_apn = tcore_context_get_apn(context->co_context);
-	s_username = tcore_context_get_username(context->co_context);
-	s_pwd = tcore_context_get_password(context->co_context);
-	s_proxy = tcore_context_get_proxy(context->co_context);
-	s_mms = tcore_context_get_mmsurl(context->co_context);
+	tcore_context_get_apn(context->co_context, &s_apn);
+	tcore_context_get_username(context->co_context, &s_username);
+	tcore_context_get_password(context->co_context, &s_pwd);
+	tcore_context_get_proxy(context->co_context, &s_proxy);
+	tcore_context_get_mmsurl(context->co_context, &s_mms);
 
+	dbg("Profile parameter extracted");
 	g_hash_table_insert(in_param, "1", g_strdup(s_apn));
 	g_hash_table_insert(in_param, "2", g_strdup(s_authtype));
 	g_hash_table_insert(in_param, "3", g_strdup(s_username));
@@ -756,17 +753,14 @@ static gboolean __ps_context_update_database(PsContext *context)
 	g_hash_table_insert(in_param, "6", g_strdup(s_mms));
 	g_hash_table_insert(in_param, "7", g_strdup(s_id));
 
-	rv = tcore_storage_update_query_database(strg_db, handle, szQuery, in_param);
+	dbg("Profile Parameter inserted in data base ");
+	rv = tcore_storage_update_query_database(strg_db, handle, query, in_param);
 	g_hash_table_destroy(in_param);
 
 	g_free(s_id);
 	g_free(s_authtype);
-	g_free(s_apn);
-	g_free(s_username);
-	g_free(s_pwd);
-	g_free(s_proxy);
-	g_free(s_mms);
 
+	dbg("Exiting");
 	return rv;
 }
 
@@ -774,28 +768,27 @@ static gboolean __ps_context_remove_database(PsContext *context)
 {
 	gchar *s_id = NULL;
 	gboolean rv = FALSE;
-	char szQuery[1000];
-
+	gchar query[1000];
 	GHashTable *in_param;
 	in_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
 
-	memset(szQuery, 0, sizeof(szQuery));
-	strcpy(szQuery, " delete from pdp_profile where profile_id = ? ");
+	memset(query, 0, sizeof(query));
+	strcpy(query, " delete from pdp_profile where profile_id = ? ");
 
 	s_id = g_strdup_printf("%d", context->profile_id);
 	g_hash_table_insert(in_param, "1", g_strdup(s_id));
 
-	rv = tcore_storage_remove_query_database(strg_db, handle, szQuery, in_param);
+	rv = tcore_storage_remove_query_database(strg_db, handle, query, in_param);
 	g_free(s_id);
 	g_hash_table_destroy(in_param);
 
 	return rv;
 }
 
-static int __ps_context_insert_network_id_to_database(gchar *mccmnc)
+static gint __ps_context_insert_network_id_to_database(gchar *mccmnc)
 {
-	char szQuery[5000];
-	int network_id = 0;
+	gchar query[5000] = {0,};
+	gint network_id = 0;
 	gboolean rv = FALSE;
 	gchar *insert_key = NULL;
 	GHashTableIter iter;
@@ -806,25 +799,23 @@ static int __ps_context_insert_network_id_to_database(gchar *mccmnc)
 	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
 				(GDestroyNotify) g_hash_table_destroy);
 
-	memset(szQuery, 0, sizeof(szQuery));
-	strcpy(szQuery,"select max(network_info_id) as network_id from network_info");
+	strcpy(query,"select max(network_info_id) as network_id from network_info");
 
-	tcore_storage_read_query_database(strg_db, handle, szQuery, NULL, out_param, 1);
+	tcore_storage_read_query_database(strg_db, handle, query, NULL, out_param, 1);
 
 	g_hash_table_iter_init(&iter, out_param);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 		GHashTableIter iter2;
 		gpointer key2, value2;
 
-		if(value){
+		if (value){
 			g_hash_table_iter_init(&iter2, (GHashTable *) value);
 			while (g_hash_table_iter_next(&iter2, &key2, &value2) == TRUE) {
 				dbg("key2(%s) value2(%s)",key2, value2);
 				if (g_str_equal(key2, "0") == TRUE) {
 					if (!value2 || g_strcmp0((const char*) value2, "") == 0 ) {
 						network_id = 0;
-					}
-					else{
+					} else {
 						network_id = atoi((const char*) value2);
 					}
 				}
@@ -836,63 +827,57 @@ static int __ps_context_insert_network_id_to_database(gchar *mccmnc)
 	g_hash_table_destroy(out_param);
 	network_id++;
 
-
-	memset(szQuery, 0, sizeof(szQuery));
-	strcpy(szQuery," insert into network_info( network_info_id, network_name, mccmnc) values( ?, ?, ?) ");
+	memset(query, 0, sizeof(query));
+	strcpy(query," insert into network_info( network_info_id, network_name, mccmnc) values( ?, ?, ?) ");
 
 	insert_key = g_strdup_printf("%d", network_id);
 	g_hash_table_insert(in_param, "1", g_strdup(insert_key));
 	g_hash_table_insert(in_param, "2", "TEMP_NETWORK");
 	g_hash_table_insert(in_param, "3", g_strdup(mccmnc));
 
-	rv = tcore_storage_insert_query_database(strg_db, handle, szQuery, in_param);
-	if(!rv)
+	rv = tcore_storage_insert_query_database(strg_db, handle, query, in_param);
+	if (!rv) {
+		err("unable to insert query into database");
 		return 0;
+	}
 
 	g_free(insert_key);
 	return network_id;
 }
 
-static int __ps_context_insert_profile_to_database(GHashTable *property, int network_id)
+static gint __ps_context_insert_profile_to_database(GHashTable *property, gint network_id)
 {
-	int profile_id = 0;
-	char szQuery[5000];
-
+	gint profile_id = 0;
+	gchar query[5000];
 	gboolean rv = FALSE;
 	GHashTableIter iter;
 	gpointer key, value;
 	GHashTable *in_param;
 	gchar *insert_key1 = NULL, *insert_key2 = NULL;
-	gchar *profile_name=NULL, *apn=NULL, *auth_type=NULL, *auth_id = NULL, *auth_pwd = NULL;
-	gchar *proxy_addr = NULL, *home_url = NULL, *svc_id = NULL, *keyword=NULL, *network_name= NULL;
+	gchar *profile_name=NULL, *apn=NULL, *auth_type=NULL;
+	gchar *auth_id = NULL, *auth_pwd = NULL;
+	gchar *proxy_addr = NULL, *home_url = NULL, *svc_id = NULL;
+	gchar *keyword = NULL, *network_name= NULL;
 
 	in_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
 
 	g_hash_table_iter_init(&iter, property);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
-
 		if (g_str_equal(key, "apn") == TRUE) {
 			apn = g_strdup(value);
-		}
-		else if (g_str_equal(key, "keyword") == TRUE) {
+		} else if (g_str_equal(key, "keyword") == TRUE) {
 			keyword = g_strdup(value);
-		}
-		else if (g_str_equal(key, "auth_type") == TRUE) {
+		} else if (g_str_equal(key, "auth_type") == TRUE) {
 			auth_type = g_strdup(value);
-		}
-		else if (g_str_equal(key, "auth_id") == TRUE) {
+		} else if (g_str_equal(key, "auth_id") == TRUE) {
 			auth_id = g_strdup(value);
-		}
-		else if (g_str_equal(key, "auth_pwd") == TRUE) {
+		} else if (g_str_equal(key, "auth_pwd") == TRUE) {
 			auth_pwd = g_strdup(value);
-		}
-		else if (g_str_equal(key, "proxy_addr") == TRUE) {
+		} else if (g_str_equal(key, "proxy_addr") == TRUE) {
 			proxy_addr = g_strdup(value);
-		}
-		else if (g_str_equal(key, "home_url") == TRUE) {
+		} else if (g_str_equal(key, "home_url") == TRUE) {
 			home_url = g_strdup(value);
-		}
-		else if (g_str_equal(key, "svc_ctg_id") == TRUE) {
+		} else if (g_str_equal(key, "svc_ctg_id") == TRUE) {
 			svc_id = g_strdup(value);
 		}
 
@@ -906,39 +891,39 @@ static int __ps_context_insert_profile_to_database(GHashTable *property, int net
 	 * telephony plugin.
 	 */
 	if (g_strcmp0(proxy_addr, ":") == 0) {
-		dbg("Invalid proxy address, set it to NULL");
+		warn("Invalid proxy address, set it to NULL");
 		g_free(proxy_addr);
 		proxy_addr = NULL;
 	}
 
-	dbg("apn (%s), auth_type (%s), auth_id(%s), auth_pwd(%s), proxy_addr(%s), home_url(%s), svc_id(%s)",
-		apn, auth_type, auth_id, auth_pwd, proxy_addr, home_url, svc_id);
+	dbg("apn (%s), auth_type (%s), auth_id(%s), auth_pwd(%s)," \
+		"proxy_addr(%s), home_url(%s), svc_id(%s)",	apn, auth_type,
+		auth_id, auth_pwd, proxy_addr, home_url, svc_id);
 
 	profile_id = __ps_context_load_profile_id_from_database();
 	if(profile_id < 0){
-		dbg("fail to get last profile id");
+		err("fail to get last profile id");
 		return 0;
 	}
 	dbg("last profile id(%d)", profile_id);
 	profile_id++;
 
-	memset(szQuery, 0, sizeof(szQuery));
-	strcpy(szQuery," insert into pdp_profile( ");
-	strcat(szQuery," profile_id, profile_name, apn, auth_type, auth_id, auth_pwd, ");
-	strcat(szQuery," pdp_protocol, proxy_ip_addr, home_url, linger_time, ");
-	strcat(szQuery," network_info_id, svc_category_id, hidden, editable, default_internet_con) values( ");
-	strcat(szQuery," ?, ?, ?, ?, ?, ?,");//1,2,3,4,5,6
-	strcat(szQuery," 1, ?, ?, 300,");//7,8
-	strcat(szQuery," ?, ?, 0, 1, ?)");//9,10,11
+	memset(query, 0, sizeof(query));
+	strcpy(query," insert into pdp_profile( ");
+	strcat(query," profile_id, profile_name, apn, auth_type, auth_id, auth_pwd, ");
+	strcat(query," pdp_protocol, proxy_ip_addr, home_url, linger_time, ");
+	strcat(query," network_info_id, svc_category_id, hidden, editable, default_internet_con) values( ");
+	strcat(query," ?, ?, ?, ?, ?, ?,");//1,2,3,4,5,6
+	strcat(query," 1, ?, ?, 300,");//7,8
+	strcat(query," ?, ?, 0, 1, ?)");//9,10,11
 
 	insert_key1 = g_strdup_printf("%d", profile_id);
 	insert_key2 = g_strdup_printf("%d", network_id);
 	network_name = __ps_context_load_network_name_from_database(network_id);
 
-	if(keyword){
+	if (keyword){
 		profile_name = g_strdup_printf("%s (%s)", network_name, keyword);
-	}
-	else{
+	} else{
 		profile_name = g_strdup_printf("%s", network_name);
 	}
 	dbg("profile name (%s)", profile_name);
@@ -958,27 +943,35 @@ static int __ps_context_insert_profile_to_database(GHashTable *property, int net
 	if (g_strcmp0(svc_id, "1") == 0) {
 		dbg("Set new internet profile as default Internet connection");
 		g_hash_table_insert(in_param, "11", g_strdup("1"));
-	/* Profile is MMS or other type don't set it as default */
+	    /* Profile is MMS or other type don't set it as default */
 	} else
 		g_hash_table_insert(in_param, "11", g_strdup("0"));
 
-	g_free(insert_key1);g_free(insert_key2);g_free(profile_name);
-	g_free(apn);g_free(auth_type);g_free(auth_id);g_free(auth_pwd);
-	g_free(proxy_addr);g_free(home_url);g_free(svc_id);
+	g_free(insert_key1);
+	g_free(insert_key2);
+	g_free(profile_name);
+	g_free(apn);
+	g_free(auth_type);
+	g_free(auth_id);
+	g_free(auth_pwd);
+	g_free(proxy_addr);
+	g_free(home_url);
+	g_free(svc_id);
 
-	rv = tcore_storage_insert_query_database(strg_db, handle, szQuery, in_param);
+	rv = tcore_storage_insert_query_database(strg_db, handle, query, in_param);
 	g_hash_table_destroy(in_param);
 
-	if(!rv)
+	if (!rv) {
+		err("unable to insert query into database");
 		return 0;
-
+	}
 	return profile_id;
 }
 
-static int __ps_context_load_network_id_from_database(gchar *mccmnc)
+static gint __ps_context_load_network_id_from_database(gchar *mccmnc)
 {
-	char szQuery[5000];
-	int network_id = 0;
+	gchar query[5000];
+	gint network_id = 0;
 	GHashTableIter iter;
 	gpointer key, value;
 	GHashTable *in_param, *out_param;
@@ -987,25 +980,24 @@ static int __ps_context_load_network_id_from_database(gchar *mccmnc)
 	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
 			(GDestroyNotify) g_hash_table_destroy);
 
-	memset(szQuery, 0, sizeof(szQuery));
-	strcpy(szQuery,"select network_info_id from network_info where mccmnc = ? ");
+	memset(query, 0, sizeof(query));
+	strcpy(query,"select network_info_id from network_info where mccmnc = ? ");
 
 	g_hash_table_insert(in_param, "1", g_strdup(mccmnc));
-	tcore_storage_read_query_database(strg_db, handle, szQuery, in_param, out_param, 1);
+	tcore_storage_read_query_database(strg_db, handle, query, in_param, out_param, 1);
 
 	g_hash_table_iter_init(&iter, out_param);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 		GHashTableIter iter2;
 		gpointer key2, value2;
 
-		if(value){
+		if (value){
 			g_hash_table_iter_init(&iter2, (GHashTable *) value);
 			while (g_hash_table_iter_next(&iter2, &key2, &value2) == TRUE) {
 				if (g_str_equal(key2, "0") == TRUE) {
 					if (!value2 || g_strcmp0((const char*) value2, "") == 0) {
 						network_id = 0;
-					}
-					else{
+					} else {
 						network_id = atoi((const char*) value2);
 					}
 				}
@@ -1020,9 +1012,9 @@ static int __ps_context_load_network_id_from_database(gchar *mccmnc)
 	return network_id;
 }
 
-static gchar* __ps_context_load_network_name_from_database(int network_id)
+static gchar* __ps_context_load_network_name_from_database(gint network_id)
 {
-	char szQuery[5000];
+	gchar query[5000];
 	gchar *network_name = NULL;
 	gchar *insert_key1 = NULL;
 	GHashTableIter iter;
@@ -1033,19 +1025,19 @@ static gchar* __ps_context_load_network_name_from_database(int network_id)
 	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
 			(GDestroyNotify) g_hash_table_destroy);
 
-	memset(szQuery, 0, sizeof(szQuery));
-	strcpy(szQuery,"select network_name from network_info where network_info_id = ? ");
+	memset(query, 0, sizeof(query));
+	strcpy(query,"select network_name from network_info where network_info_id = ? ");
 
 	insert_key1 = g_strdup_printf("%d", network_id);
 	g_hash_table_insert(in_param, "1", g_strdup(insert_key1));
-	tcore_storage_read_query_database(strg_db, handle, szQuery, in_param, out_param, 1);
+	tcore_storage_read_query_database(strg_db, handle, query, in_param, out_param, 1);
 
 	g_hash_table_iter_init(&iter, out_param);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 		GHashTableIter iter2;
 		gpointer key2, value2;
 
-		if(value){
+		if (value){
 			g_hash_table_iter_init(&iter2, (GHashTable *) value);
 			while (g_hash_table_iter_next(&iter2, &key2, &value2) == TRUE) {
 				if (g_str_equal(key2, "0") == TRUE) {
@@ -1063,10 +1055,10 @@ static gchar* __ps_context_load_network_name_from_database(int network_id)
 	return network_name;
 }
 
-static int __ps_context_load_profile_id_from_database(void)
+static gint __ps_context_load_profile_id_from_database(void)
 {
-	char szQuery[5000];
-	int profile_id = 0;
+	gchar query[5000];
+	gint profile_id = 0;
 	GHashTableIter iter;
 	gpointer key, value;
 	GHashTable *out_param;
@@ -1074,24 +1066,23 @@ static int __ps_context_load_profile_id_from_database(void)
 	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
 			(GDestroyNotify) g_hash_table_destroy);
 
-	memset(szQuery, 0, sizeof(szQuery));
-	strcpy(szQuery,"select max(profile_id) as last_profile from pdp_profile");
+	memset(query, 0, sizeof(query));
+	strcpy(query,"select max(profile_id) as last_profile from pdp_profile");
 
-	tcore_storage_read_query_database(strg_db, handle, szQuery, NULL, out_param, 1);
+	tcore_storage_read_query_database(strg_db, handle, query, NULL, out_param, 1);
 
 	g_hash_table_iter_init(&iter, out_param);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 		GHashTableIter iter2;
 		gpointer key2, value2;
 
-		if(value){
+		if (value){
 			g_hash_table_iter_init(&iter2, (GHashTable *) value);
 			while (g_hash_table_iter_next(&iter2, &key2, &value2) == TRUE) {
 				if (g_str_equal(key2, "0") == TRUE) {
-					if(!value2 || g_strcmp0((const char*) value2, "") == 0){
+					if (!value2 || g_strcmp0((const char*) value2, "") == 0){
 						profile_id = 0;
-					}
-					else{
+					} else {
 						profile_id = atoi((const char*) value2);
 					}
 				}
@@ -1104,7 +1095,7 @@ static int __ps_context_load_profile_id_from_database(void)
 	return profile_id;
 }
 
-static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
+static gboolean __ps_context_insert_profile_tuple(dictionary *dic, gint index)
 {
 	gboolean rv = FALSE;
 	GHashTable *in_param;
@@ -1322,18 +1313,20 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int index)
 	return rv;
 }
 
-static int __ps_context_get_network_id(gchar *mccmnc)
+static gint __ps_context_get_network_id(gchar *mccmnc)
 {
-	int network_id;
+	gint network_id;
 
 	network_id = __ps_context_load_network_id_from_database(mccmnc);
 	dbg("network id(%d)", network_id);
-	if(network_id > 0)
+	if (network_id > 0)
 		return network_id;
 
 	network_id = __ps_context_insert_network_id_to_database(mccmnc);
-	if(network_id <= 0 )
+	if (network_id <= 0 ) {
+		err("unable to inset mccmnc into database");
 		return -1;
+	}
 
 	return network_id;
 }
@@ -1342,6 +1335,10 @@ static gboolean __ps_context_get_profile_properties(gpointer object, GHashTable 
 {
 	gchar *s_authtype = NULL, *s_role = NULL;
 	PsContext *context = NULL;
+	TcoreContextAuth auth;
+	TcoreContextRole role;
+	gchar *username = NULL, *passwd = NULL, *proxy = NULL, *mmsurl = NULL, *apn = NULL;
+	gchar *profile = NULL;
 
 	g_return_val_if_fail(object != NULL, FALSE);
 	g_return_val_if_fail(properties != NULL, FALSE);
@@ -1349,21 +1346,39 @@ static gboolean __ps_context_get_profile_properties(gpointer object, GHashTable 
 	context = (PsContext *) object;
 	dbg("get profile properties");
 
-	s_authtype = g_strdup_printf("%d", tcore_context_get_auth(context->co_context));
-	s_role = g_strdup_printf("%d", tcore_context_get_role(context->co_context));
+	tcore_context_get_auth(context->co_context, &auth);
+	s_authtype = g_strdup_printf("%d", auth);
+	tcore_context_get_role(context->co_context, &role);
+	s_role = g_strdup_printf("%d", role);
 
 	g_hash_table_insert(properties, "path", g_strdup(context->path));
-	g_hash_table_insert(properties, "apn", tcore_context_get_apn(context->co_context));
+
+	tcore_context_get_apn(context->co_context, &apn);
+	g_hash_table_insert(properties, "apn",apn);
+
 	g_hash_table_insert(properties, "auth_type", g_strdup(s_authtype));
-	g_hash_table_insert(properties, "auth_id", tcore_context_get_username(context->co_context));
-	g_hash_table_insert(properties, "auth_pwd", tcore_context_get_password(context->co_context));
-	g_hash_table_insert(properties, "proxy_addr", tcore_context_get_proxy(context->co_context));
-	g_hash_table_insert(properties, "home_url", tcore_context_get_mmsurl(context->co_context));
+
+	tcore_context_get_username(context->co_context, &username);
+	g_hash_table_insert(properties, "auth_id", username);
+
+	tcore_context_get_password(context->co_context, &passwd);
+	g_hash_table_insert(properties, "auth_pwd", passwd);
+
+	tcore_context_get_proxy(context->co_context, &proxy);
+	g_hash_table_insert(properties, "proxy_addr", proxy);
+
+	tcore_context_get_mmsurl(context->co_context, &mmsurl);
+	g_hash_table_insert(properties, "home_url", mmsurl);
+
 	g_hash_table_insert(properties, "svc_ctg_id", g_strdup(s_role));
-	g_hash_table_insert(properties, "profile_name", tcore_context_get_profile_name(context->co_context));
+
+	tcore_context_get_profile_name(context->co_context, &profile);
+	g_hash_table_insert(properties, "profile_name", profile);
+
 	g_hash_table_insert(properties, "hidden", g_strdup(BOOL2STRING(context->hidden)));
 	g_hash_table_insert(properties, "editable", g_strdup(BOOL2STRING(context->editable)));
-	g_hash_table_insert(properties, "default_internet_conn", g_strdup(BOOL2STRING(context->default_internet)));
+	g_hash_table_insert(properties, "default_internet_conn",
+		g_strdup(BOOL2STRING(context->default_internet)));
 
 	g_free(s_authtype);
 	g_free(s_role);
@@ -1374,20 +1389,20 @@ static gboolean __ps_context_get_profile_properties(gpointer object, GHashTable 
 static gboolean __ps_context_set_default_connection_enable(gpointer object, gboolean enabled)
 {
 	PsContext *context = object;
-	int role = CONTEXT_ROLE_UNKNOWN;
-	g_return_val_if_fail(context != NULL, FALSE);
+	TcoreContextRole role;
+	tcore_check_return_value(context != NULL, FALSE);
 
-	role = tcore_context_get_role(context->co_context);
-	if(role == CONTEXT_ROLE_INTERNET){
+	tcore_context_get_role(context->co_context, &role);
+	if (role == TCORE_CONTEXT_ROLE_INTERNET){
 		context->default_internet = enabled;
 	}
 
 	return TRUE;
 }
 
-static gpointer __ps_context_add_context(gpointer modem, gchar *mccmnc, int profile_id)
+static gpointer __ps_context_add_context(gpointer modem, gchar *mccmnc, gint profile_id)
 {
-	char szQuery[5000];
+	gchar query[5000];
 	DBusGConnection *conn = NULL;
 	TcorePlugin *p = NULL;
 
@@ -1404,20 +1419,21 @@ static gpointer __ps_context_add_context(gpointer modem, gchar *mccmnc, int prof
 	conn = _ps_modem_ref_dbusconn(modem);
 	p = _ps_modem_ref_plugin(modem);
 
-	memset(szQuery, '\0', sizeof(szQuery));
-	strcpy(szQuery, "select");
-	strcat(szQuery, " a.network_info_id, a.network_name, a.mccmnc,"); //0 , 1, 2
-	strcat(szQuery, " b.profile_id, b.profile_name, b.apn, "); //3, 4, 5
-	strcat(szQuery, " b.auth_type, b.auth_id, b.auth_pwd,"); //6, 7, 8
-	strcat(szQuery, " b.proxy_ip_addr, b.home_url, b.pdp_protocol, "); //9, 10 , 11
-	strcat(szQuery, " b.linger_time, b.traffic_class, b.is_static_ip_addr, b.ip_addr,"); //12, 13, 14, 15
-	strcat(szQuery, " b.is_static_dns_addr, b.dns_addr1, b.dns_addr2, b.svc_category_id, b.hidden, b.editable, b.default_internet_con"); //16, 17, 18, 19, 20, 21, 22
-	strcat(szQuery, " from network_info a, pdp_profile b");
-	strcat(szQuery, " where b.profile_id = ? and a.network_info_id = b.network_info_id ");
+	memset(query, '\0', sizeof(query));
+	strcpy(query, "select");
+	strcat(query, " a.network_info_id, a.network_name, a.mccmnc,"); //0 , 1, 2
+	strcat(query, " b.profile_id, b.profile_name, b.apn, "); //3, 4, 5
+	strcat(query, " b.auth_type, b.auth_id, b.auth_pwd,"); //6, 7, 8
+	strcat(query, " b.proxy_ip_addr, b.home_url, b.pdp_protocol, "); //9, 10 , 11
+	strcat(query, " b.linger_time, b.traffic_class, b.is_static_ip_addr, b.ip_addr,"); //12, 13, 14, 15
+	strcat(query, " b.is_static_dns_addr, b.dns_addr1, b.dns_addr2, b.svc_category_id," \
+		"b.hidden, b.editable, b.default_internet_con"); //16, 17, 18, 19, 20, 21, 22
+	strcat(query, " from network_info a, pdp_profile b");
+	strcat(query, " where b.profile_id = ? and a.network_info_id = b.network_info_id ");
 
 	insert_key1 = g_strdup_printf("%d", profile_id);
 	g_hash_table_insert(in_param, "1", g_strdup(insert_key1));
-	tcore_storage_read_query_database(strg_db, handle, szQuery, in_param, out_param, 23);
+	tcore_storage_read_query_database(strg_db, handle, query, in_param, out_param, 23);
 
 	g_hash_table_iter_init(&iter, out_param);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
@@ -1452,13 +1468,13 @@ gboolean _ps_context_reset_profile_table(void)
 {
 	gboolean rv = FALSE;
 	GHashTable *in_param;
-	char szQuery[5000];
+	gchar query[5000];
 
-	memset(szQuery, '\0', sizeof(szQuery));
-	strcat(szQuery, " delete from pdp_profile");
+	memset(query, '\0', sizeof(query));
+	strcat(query, " delete from pdp_profile");
 
 	in_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
-	rv = tcore_storage_remove_query_database(strg_db, handle, szQuery, in_param);
+	rv = tcore_storage_remove_query_database(strg_db, handle, query, in_param);
 
 	g_hash_table_destroy(in_param);
 	return rv;
@@ -1466,32 +1482,29 @@ gboolean _ps_context_reset_profile_table(void)
 
 gboolean _ps_context_fill_profile_table_from_ini_file(void)
 {
-	int index = 1;
-	int data_exist = 0;
-
+	gint index = 1;
+	gint data_exist = 0;
 	dictionary *dic = NULL;
-	dic = iniparser_load("/opt/system/csc-default/data/csc-default-data-connection.ini");
 
+	dic = iniparser_load("/opt/system/csc-default/data/csc-default-data-connection.ini");
 	if(dic == NULL){
 		dbg("fail to load the csc default file");
 		return FALSE;
 	}
 
-	do{
+	do {
 		gchar *section_key = NULL;
 
 		section_key = g_strdup_printf("connection:profile_id_%d", index);
 		dbg("section key (%s)", section_key);
 		data_exist = iniparser_find_entry(dic, section_key);
-		if(!data_exist){
+		if (!data_exist){
 			g_free(section_key);
 			iniparser_freedict(dic);
-			dbg("no more data in ini");
+			err("no more data in ini");
 			return TRUE;
 		}
-
 		__ps_context_insert_profile_tuple(dic, index);
-
 		g_free(section_key);
 		index++;
 
@@ -1502,7 +1515,7 @@ gboolean _ps_context_fill_profile_table_from_ini_file(void)
 
 gboolean _ps_context_reset_hashtable(void)
 {
-	if(!contexts)
+	if (!contexts)
 		return TRUE;
 
 	g_hash_table_foreach_remove(contexts, __remove_contexts, NULL);
@@ -1511,7 +1524,7 @@ gboolean _ps_context_reset_hashtable(void)
 
 GHashTable* _ps_context_create_hashtable(DBusGConnection *conn, TcorePlugin *p, gchar *mccmnc)
 {
-	char szQuery[5000];
+	gchar query[5000];
 	GHashTableIter iter;
 	gpointer key, value;
 	GHashTable *in_param, *out_param;
@@ -1521,21 +1534,21 @@ GHashTable* _ps_context_create_hashtable(DBusGConnection *conn, TcorePlugin *p, 
 
 	dbg("Create profile by mccmnc: [%s]", mccmnc);
 
-	memset(szQuery, '\0', sizeof(szQuery));
-	strcpy(szQuery, "select");
-	strcat(szQuery, " a.network_info_id, a.network_name, a.mccmnc,"); //0 , 1, 2
-	strcat(szQuery, " b.profile_id, b.profile_name, b.apn, "); //3, 4, 5
-	strcat(szQuery, " b.auth_type, b.auth_id, b.auth_pwd,"); //6, 7, 8
-	strcat(szQuery, " b.proxy_ip_addr, b.home_url, b.pdp_protocol, "); //9, 10 , 11
-	strcat(szQuery, " b.linger_time, b.traffic_class, b.is_static_ip_addr, b.ip_addr,"); //12, 13, 14, 15
-	strcat(szQuery, " b.is_static_dns_addr, b.dns_addr1, b.dns_addr2, b.svc_category_id, b.hidden, b.editable, b.default_internet_con"); //16,17, 18, 19, 20, 21, 22
-	strcat(szQuery, " from network_info a, pdp_profile b");
-	strcat(szQuery, " where a.mccmnc= ? and a.network_info_id = b.network_info_id ");
+	memset(query, '\0', sizeof(query));
+	strcpy(query, "select");
+	strcat(query, " a.network_info_id, a.network_name, a.mccmnc,"); //0 , 1, 2
+	strcat(query, " b.profile_id, b.profile_name, b.apn, "); //3, 4, 5
+	strcat(query, " b.auth_type, b.auth_id, b.auth_pwd,"); //6, 7, 8
+	strcat(query, " b.proxy_ip_addr, b.home_url, b.pdp_protocol, "); //9, 10 , 11
+	strcat(query, " b.linger_time, b.traffic_class, b.is_static_ip_addr, b.ip_addr,"); //12, 13, 14, 15
+	strcat(query, " b.is_static_dns_addr, b.dns_addr1, b.dns_addr2, b.svc_category_id, b.hidden, b.editable, b.default_internet_con"); //16,17, 18, 19, 20, 21, 22
+	strcat(query, " from network_info a, pdp_profile b");
+	strcat(query, " where a.mccmnc= ? and a.network_info_id = b.network_info_id ");
 
 	g_hash_table_insert(in_param, "1", g_strdup(mccmnc));
 	dbg("Inserted mccmnc to Hash Table");
 
-	tcore_storage_read_query_database(strg_db, handle, szQuery, in_param, out_param, 23);
+	tcore_storage_read_query_database(strg_db, handle, query, in_param, out_param, 23);
 
 	g_hash_table_iter_init(&iter, out_param);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
@@ -1565,31 +1578,33 @@ gboolean _ps_context_add_context(gpointer modem, gchar *operator, GHashTable *pr
 {
 	GHashTable *services = NULL;
 	gpointer context = NULL;
-
 	GHashTableIter iter;
 	gpointer key, value;
-	int network_id = 0;
-	int profile_id = 0;
+	gint network_id = 0;
+	gint profile_id = 0;
 
 	network_id = __ps_context_get_network_id(operator);
-	if(network_id <= 0){
-		dbg("fail to add network info");
+	if (network_id <= 0){
+		err("fail to add network info");
 		return FALSE;
 	}
-
 	profile_id = __ps_context_insert_profile_to_database(property, network_id);
-	if(profile_id <= 0){
-		dbg("fail to insert profile info to database");
+	if (profile_id <= 0){
+		err("fail to insert profile info to database");
 		return FALSE;
 	}
 
 	context = __ps_context_add_context(modem, operator, profile_id);
-	if(!context)
+	if (!context) {
+		err("fail to add context");
 		return FALSE;
+	}
 
 	services = _ps_modem_ref_services(modem);
-	if(!services)
+	if (!services) {
+		err("fail to find services");
 		return FALSE;
+	}
 
 	g_hash_table_iter_init(&iter, services);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
@@ -1601,47 +1616,62 @@ gboolean _ps_context_add_context(gpointer modem, gchar *operator, GHashTable *pr
 
 gboolean _ps_context_get_properties(gpointer object, GHashTable *properties)
 {
-	int context_state = 0;
+	TcoreContextState state;
 	gboolean active = FALSE;
 	PsContext *context = object;
+	gchar *ip4, *dns1, *dns2, *gw, *proxy, *dev_name;
 
 	dbg("get context properties");
 	g_return_val_if_fail(context != NULL, FALSE);
 	g_return_val_if_fail(properties != NULL, FALSE);
 
-	context_state =    tcore_context_get_state(context->co_context);
-	if (context_state == CONTEXT_STATE_ACTIVATED)
+	tcore_context_get_state(context->co_context, &state);
+	if (state == TCORE_CONTEXT_STATE_ACTIVATED)
 		active = TRUE;
 
 	g_hash_table_insert(properties, "path", g_strdup(context->path));
 	g_hash_table_insert(properties, "active", g_strdup(BOOL2STRING(active)));
-	g_hash_table_insert(properties, "ipv4_address", tcore_context_get_ipv4_addr(context->co_context));
-	g_hash_table_insert(properties, "ipv4_gateway", tcore_context_get_ipv4_gw(context->co_context));
-	g_hash_table_insert(properties, "ipv4_dns1", tcore_context_get_ipv4_dns1(context->co_context));
-	g_hash_table_insert(properties, "ipv4_dns2", tcore_context_get_ipv4_dns2(context->co_context));
+
+	tcore_context_get_ipv4_addr(context->co_context, &ip4);
+	g_hash_table_insert(properties, "ipv4_address", ip4);
+
+	tcore_context_get_ipv4_gw(context->co_context, &gw);
+	g_hash_table_insert(properties, "ipv4_gateway",gw);
+
+	tcore_context_get_ipv4_dns1(context->co_context, &dns1);
+	g_hash_table_insert(properties, "ipv4_dns1", dns1);
+
+	tcore_context_get_ipv4_dns2(context->co_context, &dns2);
+	g_hash_table_insert(properties, "ipv4_dns2", dns2);
+
 	g_hash_table_insert(properties, "ipv6_address", "::" );
 	g_hash_table_insert(properties, "ipv6_gateway", "::" );
 	g_hash_table_insert(properties, "ipv6_dns1", "::" );
 	g_hash_table_insert(properties, "ipv6_dns2", "::" );
-	g_hash_table_insert(properties, "proxy", tcore_context_get_proxy(context->co_context));
-	g_hash_table_insert(properties, "dev_name", tcore_context_get_ipv4_devname(context->co_context));
 
+	tcore_context_get_proxy(context->co_context, &proxy);
+	g_hash_table_insert(properties, "proxy", proxy);
+
+	tcore_context_get_ipv4_devname(context->co_context, &dev_name);
+	g_hash_table_insert(properties, "dev_name",dev_name);
+
+	dbg("Exiting");
 	return TRUE;
 }
 
 gboolean _ps_context_set_alwayson_enable(gpointer object, gboolean enabled)
 {
 	PsContext *context = object;
-	int role = CONTEXT_ROLE_UNKNOWN;
+	TcoreContextRole role;
 
 	dbg("Set Always ON: [%s]", (enabled ? "YES" : "NO"));
 
-	g_return_val_if_fail(context != NULL, FALSE);
+	tcore_check_return_value(context != NULL, FALSE);
 
-	role = tcore_context_get_role(context->co_context);
+	tcore_context_get_role(context->co_context, &role);
 	dbg("Role: [%d] Default Internet: [%s]",
 		role, (context->default_internet ? "YES" : "NO"));
-	if(role == CONTEXT_ROLE_INTERNET && context->default_internet) {
+	if (role == TCORE_CONTEXT_ROLE_INTERNET && context->default_internet) {
 		dbg("Setting Always ON: [%s]", (enabled ? "YES" : "NO"));
 		context->alwayson = enabled;
 	}
@@ -1652,13 +1682,13 @@ gboolean _ps_context_set_alwayson_enable(gpointer object, gboolean enabled)
 gboolean _ps_context_get_default_internet(gpointer object)
 {
 	PsContext *context = object;
-	int role = CONTEXT_ROLE_UNKNOWN;
+	TcoreContextRole role;
 	g_return_val_if_fail(context != NULL, FALSE);
 
-	role = tcore_context_get_role(context->co_context);
-	if(role == CONTEXT_ROLE_INTERNET && context->default_internet){
+
+	tcore_context_get_role(context->co_context, &role);
+	if (role == TCORE_CONTEXT_ROLE_INTERNET && context->default_internet)
 		return TRUE;
-	}
 
 	return FALSE;
 }
@@ -1717,15 +1747,16 @@ gboolean _ps_context_set_connected(gpointer object, gboolean enabled)
 			(enabled ? "CONNECTED" : "NOT CONNECTED"));
 
 	/* Get IPv4 Address */
-	ipv4 = tcore_context_get_ipv4_addr(context->co_context);
+	tcore_context_get_ipv4_addr(context->co_context, &ipv4);
 	dbg("IPv4 Address: [%s]", ipv4);
+	g_free(ipv4);
 
 	if (enabled) {
 		dbg("Set state - ACTIVATED");
-		tcore_context_set_state(context->co_context, CONTEXT_STATE_ACTIVATED);
+		tcore_context_set_state(context->co_context, TCORE_CONTEXT_STATE_ACTIVATED);
 
 		/* If IP address is 0.0.0.0, deactivate the context */
-		if( g_str_equal(ipv4, "0.0.0.0") == TRUE ){
+		if (g_str_equal(ipv4, "0.0.0.0") == TRUE){
 			dbg("IP Address: [0.0.0.0] - Deactivate context!!!");
 			_ps_service_deactivate_context(context->p_service, context);
 			return TRUE;
@@ -1733,10 +1764,9 @@ gboolean _ps_context_set_connected(gpointer object, gboolean enabled)
 
 		/* Reset connection timer */
 		_ps_service_reset_connection_timer(context);
-	}
-	else {
+	} else {
 		dbg("Set state - DEACTIVATED");
-		tcore_context_set_state(context->co_context, CONTEXT_STATE_DEACTIVATED);
+		tcore_context_set_state(context->co_context, TCORE_CONTEXT_STATE_DEACTIVATED);
 
 		/* Reset device information */
 		tcore_context_reset_devinfo(context->co_context);
@@ -1757,10 +1787,12 @@ gboolean _ps_context_set_connected(gpointer object, gboolean enabled)
 gboolean _ps_context_set_ps_defined(gpointer *object, gboolean value, int cid)
 {
 	PsContext *context = (PsContext *)object;
+	guint id;
 
-	g_return_val_if_fail(context != NULL, FALSE);
+	tcore_check_return_value(context != NULL, FALSE);
 
-	if(tcore_context_get_id(context->co_context) == (unsigned int)cid){
+	tcore_context_get_id(context->co_context, &id);
+	if (id == (unsigned int)cid){
 		context->ps_defined = value;
 		dbg("Context: [0x%x] Context define: [%s]",
 				context, (context->ps_defined ? "YES" : "NO"));

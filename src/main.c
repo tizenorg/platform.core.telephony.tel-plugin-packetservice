@@ -1,9 +1,7 @@
 /*
  * tel-plugin-packetservice
  *
- * Copyright (c) 2012 Samsung Electronics Co., Ltd. All rights reserved.
- *
- * Contact: DongHoo Park <donghoo.park@samsung.com>
+ * Copyright (c) 2013 Samsung Electronics Co. Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +14,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
 #include <stdio.h>
@@ -26,18 +23,19 @@
 #include <tcore.h>
 #include <plugin.h>
 
-#include <ps.h>
+#include "packet-services.h"
 
-static enum tcore_hook_return __on_hook_modem_added(Server *s, CoreObject *source,
-		enum tcore_notification_command command, unsigned int data_len, void *data, void *user_data)
+static TcoreHookReturn __on_hook_modem_added(Server *server,
+		TcoreServerNotification command, guint data_len, void *data,
+		void *user_data)
 {
 	gpointer *master = user_data;
-	gboolean rv=FALSE;
+	gboolean rv = FALSE;
 
 	rv = _ps_master_create_modems(master);
 	dbg("Modem Added hook operation: [%s]", (rv ? "SUCCESS" : "FAIL"));
 
-	return TCORE_HOOK_RETURN_STOP_PROPAGATION;
+	return TCORE_HOOK_RETURN_CONTINUE;
 }
 
 static gboolean on_load()
@@ -51,7 +49,7 @@ static gboolean on_init(TcorePlugin *p)
 	gpointer *master;
 	DBusGConnection *conn;
 	GError *error = NULL;
-	gboolean rv=FALSE;
+	gboolean rv = FALSE;
 
 	//get dbus connection
 	conn = dbus_g_bus_get(DBUS_BUS_SYSTEM, &error);
@@ -59,12 +57,11 @@ static gboolean on_init(TcorePlugin *p)
 		err("fail to get dbus(%s)", error->message);
 		return FALSE;
 	}
-	dbg("get dbus connection (%p)", conn);
+	dbg("get dbus connection (%p) plugin[%p]", conn, p);
 
-	dbg("plugin pointer (%p)", p);
 	rv = _ps_context_initialize(p);
-	if(rv != TRUE){
-		dbg("fail to initialize context global variable");
+	if (rv != TRUE){
+		err("fail to initialize context global variable");
 		return FALSE;
 	}
 
@@ -73,8 +70,10 @@ static gboolean on_init(TcorePlugin *p)
 	if (rv == FALSE) {
 		dbg("Modem NOT created... will wait for TNOTI_MODEM_ADDED notification");
 
-		tcore_server_add_notification_hook(tcore_plugin_ref_server(p),
-							TNOTI_MODEM_ADDED, __on_hook_modem_added, master);
+	tcore_server_add_notification_hook(tcore_plugin_ref_server(p),
+		TCORE_SERVER_NOTIFICATION_ADDED_MODEM_PLUGIN,
+		__on_hook_modem_added, master);
+
 	} else {
 		dbg("initialized PacketService plugin!");
 	}
