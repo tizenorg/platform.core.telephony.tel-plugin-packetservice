@@ -1331,7 +1331,6 @@ gboolean _ps_context_get_properties_handler(gpointer object, GVariantBuilder *pr
 	if (state == TCORE_CONTEXT_STATE_ACTIVATED)
 		active = TRUE;
 
-
 	tcore_context_get_ipv4_addr(context->co_context,&ip4);
 	tcore_context_get_ipv4_gw(context->co_context, &gw);
 	tcore_context_get_ipv4_dns1(context->co_context, &dns1);
@@ -1389,7 +1388,6 @@ GVariant * _ps_context_get_properties(gpointer object, GVariantBuilder *properti
 	if (context_state == TCORE_CONTEXT_STATE_ACTIVATED)
 		active = TRUE;
 
-	active &= context->b_active;
 
 	tcore_context_get_ipv4_addr(context->co_context, &ipv4_address) ;
 	tcore_context_get_ipv4_gw(context->co_context, &ipv4_gateway );
@@ -1507,10 +1505,9 @@ gboolean _ps_context_set_connected(gpointer object, gboolean enabled)
 
 	tcore_context_get_ipv4_addr(context->co_context, &ipv4);
 	dbg("IPv4 Address: [%s]", ipv4);
-	g_free(ipv4);
 
 	if (enabled) {
-
+		dbg("Set state - ACTIVATED");
 		tcore_context_set_state(context->co_context, TCORE_CONTEXT_STATE_ACTIVATED);
 
 		if ( g_str_equal(ipv4, "0.0.0.0") == TRUE ) {
@@ -1521,16 +1518,22 @@ gboolean _ps_context_set_connected(gpointer object, gboolean enabled)
 
 		_ps_service_reset_connection_timer(context);
 
-	}
-	else {
+	} else {
 		dbg("Set state - DEACTIVATED");
 		tcore_context_set_state(context->co_context, TCORE_CONTEXT_STATE_DEACTIVATED);
 
 		/* Reset device information */
 		tcore_context_reset_devinfo(context->co_context);
-		__ps_context_emit_property_changed_signal(context);
+
+		/* Reset connection timer */
+        _ps_service_connection_timer(context->p_service, context);
 	}
 
+	/* Emit Property changed signal */
+	__ps_context_emit_property_changed_signal(context);
+
+	/* Free memory */
+	g_free(ipv4);
 	return TRUE;
 }
 
