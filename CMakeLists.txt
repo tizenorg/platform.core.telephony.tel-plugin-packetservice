@@ -14,70 +14,62 @@ endif()
 
 # Set required packages
 INCLUDE(FindPkgConfig)
-pkg_check_modules(pkgs REQUIRED glib-2.0 dbus-glib-1 dlog tcore iniparser)
+pkg_check_modules(pkgs REQUIRED glib-2.0 gio-2.0 gio-unix-2.0 tcore libtzplatform-config iniparser)
 
 FOREACH(flag ${pkgs_CFLAGS})
 	SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} ${flag}")
 ENDFOREACH(flag)
 
-INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include/)
+INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/include/ ${CMAKE_SOURCE_DIR}/cmake_tmp )
 
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS} -Werror -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Wdeclaration-after-statement -Wmissing-declarations -Wredundant-decls -Wcast-align")
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS}")
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wextra -fvisibility=hidden -fPIC")
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-parameter -Wno-missing-field-initializers -Wdeclaration-after-statement -Wmissing-declarations -Wcast-align")
 
-ADD_DEFINITIONS("-DFEATURE_DLOG_DEBUG")
-ADD_DEFINITIONS("-DTCORE_LOG_TAG=\"PACKETSERVICE\"")
+### Purge unused code ###
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fdata-sections -ffunction-sections -Wl,--gc-sections")
+
+ADD_DEFINITIONS("-DFEATURE_TLOG_DEBUG")
+ADD_DEFINITIONS("-DTCORE_LOG_TAG=\"PS\"")
+ADD_DEFINITIONS("-DPLUGIN_VERSION=${VERSION}")
+ADD_DEFINITIONS("-DEXPORT_API=__attribute__((visibility(\"default\")))")
 
 MESSAGE(${CMAKE_C_FLAGS})
-MESSAGE(${CMAKE_EXE_LINKER_FLAGS})
+MESSAGE(${pkgs_LDFLAGS})
 
 SET(SRCS
-		src/main.c
-		src/master.c
-		src/modem.c
-		src/service.c
-		src/context.c
-		src/error.c
-		src/tcore-interface.c
+	src/main.c
+	src/master.c
+	src/modem.c
+	src/service.c
+	src/context.c
+	src/tcore-interface.c
+)
+
+SET(INTROSPECTION_PATH ${CMAKE_SOURCE_DIR}/introspection)
+
+ADD_CUSTOM_COMMAND(
+	OUTPUT ${CMAKE_BINARY_DIR}/generated-code.c
+	COMMAND gdbus-codegen --interface-prefix com.tcore.ps.
+	--generate-c-code generated-code
+	--c-namespace PacketService
+	--c-generate-object-manager
+	--generate-docbook generated-docs
+	${INTROSPECTION_PATH}/master.xml
+	${INTROSPECTION_PATH}/modem.xml
+	${INTROSPECTION_PATH}/service.xml
+	${INTROSPECTION_PATH}/context.xml
+	COMMENT "Generating GDBus .c/.h"
 )
 
 # library build
-ADD_LIBRARY(ps-plugin SHARED ${SRCS})
-TARGET_LINK_LIBRARIES(ps-plugin ${pkgs_LDFLAGS})
-SET_TARGET_PROPERTIES(ps-plugin PROPERTIES PREFIX "" OUTPUT_NAME ps-plugin)
-
-ADD_CUSTOM_TARGET(ps-iface-master-glue.h
-	COMMAND dbus-binding-tool --mode=glib-server --prefix=ps_iface_master
-	--output=${CMAKE_SOURCE_DIR}/include/ps-iface-master-glue.h
-	${CMAKE_SOURCE_DIR}/interfaces/ps-iface-master.xml
-	DEPENDS ${CMAKE_SOURCE_DIR}/interfaces/ps-iface-master.xml
-)
-ADD_CUSTOM_TARGET(ps-iface-modem-glue.h
-	COMMAND dbus-binding-tool --mode=glib-server --prefix=ps_iface_modem
-	--output=${CMAKE_SOURCE_DIR}/include/ps-iface-modem-glue.h
-	${CMAKE_SOURCE_DIR}/interfaces/ps-iface-modem.xml
-	DEPENDS ${CMAKE_SOURCE_DIR}/interfaces/ps-iface-modem.xml
-)
-ADD_CUSTOM_TARGET(ps-iface-service-glue.h
-	COMMAND dbus-binding-tool --mode=glib-server --prefix=ps_iface_service
-	--output=${CMAKE_SOURCE_DIR}/include/ps-iface-service-glue.h
-	${CMAKE_SOURCE_DIR}/interfaces/ps-iface-service.xml
-	DEPENDS ${CMAKE_SOURCE_DIR}/interfaces/ps-iface-service.xml
-)
-ADD_CUSTOM_TARGET(ps-iface-context-glue.h
-	COMMAND dbus-binding-tool --mode=glib-server --prefix=ps_iface_context
-	--output=${CMAKE_SOURCE_DIR}/include/ps-iface-context-glue.h
-	${CMAKE_SOURCE_DIR}/interfaces/ps-iface-context.xml
-	DEPENDS ${CMAKE_SOURCE_DIR}/interfaces/ps-iface-context.xml
-)
-
-ADD_DEPENDENCIES(${PROJECT_NAME} ps-iface-master-glue.h)
-ADD_DEPENDENCIES(${PROJECT_NAME} ps-iface-modem-glue.h)
-ADD_DEPENDENCIES(${PROJECT_NAME} ps-iface-service-glue.h)
-ADD_DEPENDENCIES(${PROJECT_NAME} ps-iface-context-glue.h)
+ADD_LIBRARY(${PROJECT_NAME} SHARED ${SRCS} ${CMAKE_BINARY_DIR}/generated-code.c)
+TARGET_LINK_LIBRARIES(${PROJECT_NAME} ${pkgs_LDFLAGS})
+SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES PREFIX "" OUTPUT_NAME ${PROJECT_NAME})
 
 # install
 INSTALL(FILES ${CMAKE_SOURCE_DIR}/src/ps-plugin.conf DESTINATION ${SYSCONFDIR}/dbus-1/system.d)
 INSTALL(FILES ${CMAKE_SOURCE_DIR}/resources/dnet_db.sql DESTINATION ${DATAROOTDIR}/ps-plugin)
 INSTALL(FILES ${CMAKE_SOURCE_DIR}/resources/dnet_db_data.sql DESTINATION ${DATAROOTDIR}/ps-plugin)
-INSTALL(TARGETS ps-plugin LIBRARY DESTINATION ${LIB_INSTALL_DIR}/telephony/plugins)
+INSTALL(TARGETS ${PROJECT_NAME} LIBRARY DESTINATION ${LIB_INSTALL_DIR}/telephony/plugins)
 INSTALL(FILES ${CMAKE_SOURCE_DIR}/LICENSE DESTINATION /usr/share/license RENAME tel-plugin-packetservice)

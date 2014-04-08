@@ -1,9 +1,7 @@
 /*
  * tel-plugin-packetservice
  *
- * Copyright (c) 2012 Samsung Electronics Co., Ltd. All rights reserved.
- *
- * Contact: DongHoo Park <donghoo.park@samsung.com>
+ * Copyright (c) 2013 Samsung Electronics Co. Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,232 +14,44 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
 #include <unistd.h>
 
-#include "ps-master.h"
-
 #include "ps.h"
-#include "ps-error.h"
+#include "generated-code.h"
 
 #include <server.h>
 #include <plugin.h>
 #include <storage.h>
 #include <hal.h>
 
-#define PS_MASTER_PATH	"/"
+#define PS_MASTER_PATH		"/"
 #define PROP_DEFAULT		FALSE
 #define PROP_DEFAULT_STR	NULL
 #define BOOL2STRING(a)		((a==TRUE) ? ("TRUE"):("FALSE"))
 
-/*Properties*/
-
-enum {
-	PROP_MASTER_O,
-	PROP_MASTER_PLUGIN,
-	PROP_MASTER_CONN,
-	PROP_MASTER_PATH
-};
-
-enum {
-	 SIG_MASTER_MODEM_ADDED,
-	 SIG_MASTER_MODEM_REMOVED,
-	 SIG_MASTER_LAST
-};
-
-static guint32 signals[SIG_MASTER_LAST] = {0,};
-
-struct PsMasterClass {
-	GObjectClass parent;
-
-	void (*modem_added)(PsMaster *master, gchar *modem_path);
-	void (*modem_removed)(PsMaster *master, gchar *modem_path);
-};
-
-struct PsMaster {
-	GObject parent;
-
-	//member variable
-	gchar *path;
-	TcorePlugin *plg;
-	DBusGConnection *conn;
-	GHashTable *modems;
-};
-
-G_DEFINE_TYPE(PsMaster, ps_master, G_TYPE_OBJECT);
-
-/*Function Declaration*/
-static void __ps_master_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
-static void __ps_master_set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec);
-
-gboolean ps_iface_master_get_modems(PsMaster *master, DBusGMethodInvocation *context);
-gboolean ps_iface_master_get_profile_list(PsMaster *master, DBusGMethodInvocation *context);
-gboolean ps_iface_master_add_profile(PsMaster *master, GHashTable *profile_property, gboolean *result, GError **error);
-gboolean ps_iface_master_reset_profile(PsMaster *master, gboolean *result, GError **error);
 
 static void __ps_master_emit_modem_added_signal(PsMaster *master, gpointer modem);
-/*static void __ps_master_emit_modem_removed_signal(PsMaster *master, gpointer modem);*/
+/* static void __ps_master_emit_modem_removed_signal(PsMaster *master, gpointer modem); */
+static void _ps_master_setup_interface(PacketServiceMaster *master, PsMaster *master_data);
 
-static void __remove_modem(gpointer data);
-static void __ps_master_register_key_callback(gpointer master, enum tcore_storage_key key);
-static void __ps_master_storage_key_callback(enum tcore_storage_key key, void *value, void *user_data);
+static void __ps_master_register_key_callback(gpointer master, TcoreStorageKey key);
+static void __ps_master_storage_key_callback(TcoreStorageKey key, void *value, void *user_data);
 
-#include "ps-iface-master-glue.h"
-
-static void ps_master_init(PsMaster *master)
+#if 0
+static void __ps_master_handle_contexts(gchar *request)
 {
-	dbg("ps master init");
-	master->plg = NULL;
-	master->conn = NULL;
-	master->path = PROP_DEFAULT_STR;
-	master->modems = g_hash_table_new_full(g_str_hash,g_str_equal, g_free, __remove_modem);
-	return;
-}
-
-static void ps_master_class_init(PsMasterClass *klass)
-{
-	GObjectClass *object_class = G_OBJECT_CLASS(klass);
-
-	dbg("class_init");
-
-	//set property
-	object_class->get_property = __ps_master_get_property;
-	object_class->set_property = __ps_master_set_property;
-
-	//register class to dbus
-	dbus_g_object_type_install_info(PS_TYPE_MASTER, &dbus_glib_ps_iface_master_object_info);
-
-	//add properties
-	g_object_class_install_property(
-			object_class,
-			PROP_MASTER_PLUGIN,
-			g_param_spec_pointer("plg", "PLUGIN", "Plug in Object",
-					G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
-
-	g_object_class_install_property(
-			object_class,
-			PROP_MASTER_CONN,
-			g_param_spec_boxed("conn", "CONNECTION", "DBus connection", DBUS_TYPE_G_CONNECTION,
-					G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
-
-	g_object_class_install_property(
-			object_class,
-			PROP_MASTER_PATH,
-			g_param_spec_string("path", "Path", "Object path", NULL,
-					G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
-
-	//add signal handler
-	signals[SIG_MASTER_MODEM_ADDED] = g_signal_new("modem-added", G_OBJECT_CLASS_TYPE(klass),
-			G_SIGNAL_RUN_LAST, G_STRUCT_OFFSET(PsMasterClass, modem_added), NULL, NULL,
-			g_cclosure_marshal_VOID__BOXED, G_TYPE_NONE, 1, DBUS_TYPE_G_STRING_STRING_HASHTABLE);
-
-	signals[SIG_MASTER_MODEM_REMOVED] = g_signal_new("modem-removed", G_OBJECT_CLASS_TYPE(klass),
-			G_SIGNAL_RUN_LAST, G_STRUCT_OFFSET(PsMasterClass, modem_removed), NULL, NULL,
-			g_cclosure_marshal_VOID__STRING, G_TYPE_NONE, 1, DBUS_TYPE_G_OBJECT_PATH);
-
-	return;
-}
-
-static void __ps_master_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
-{
-	return;
-}
-
-static void __ps_master_set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec)
-{
-	PsMaster *master = PS_MASTER(object);
-
-	switch (prop_id) {
-		case PROP_MASTER_PLUGIN: {
-			master->plg = g_value_get_pointer(value);
-			msg("	master(%p) set plg(%p)", master, master->plg);
-		}
-			break;
-		case PROP_MASTER_CONN: {
-			master->conn = g_value_get_boxed(value);
-			msg("	master(%p) set conn(%p)", master, master->conn);
-		}
-			break;
-		case PROP_MASTER_PATH: {
-			if (master->path) g_free(master->path);
-			master->path = g_value_dup_string(value);
-			msg("	master(%p) set path(%s)", master, master->path);
-		}
-			break;
-		default:
-			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
-			break;
-	} //swtich end
-
-	return;
-}
-
-gboolean ps_iface_master_get_modems(PsMaster *master, DBusGMethodInvocation *context)
-{
-	GError *error = NULL;
 	GHashTableIter iter;
 	gpointer key, value;
-	GHashTable *modems;
-
-	dbg("master get modems interface");
-
-	if (master->modems == NULL) {
-		g_set_error(&error, PS_ERROR, PS_ERR_INTERNAL, "master(%p) does not have modems", master);
-		dbus_g_method_return_error(context, error);
-		return FALSE;
-	}
-
-	modems = g_hash_table_new_full(g_direct_hash, g_str_equal, g_free,
-			(GDestroyNotify) g_hash_table_destroy);
-
-	g_hash_table_iter_init(&iter, master->modems);
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
-		gchar *path = NULL;
-		GHashTable *properties = NULL;
-		gboolean rv = FALSE;
-
-		properties = g_hash_table_new(g_str_hash, g_str_equal);
-		rv = _ps_modem_get_properties(value, properties);
-		if (rv != TRUE) {
-			g_set_error(&error, PS_ERROR, PS_ERR_INTERNAL, "fail to get properties modem(%p)",
-					value);
-			dbus_g_method_return_error(context, error);
-			g_hash_table_destroy(properties);
-			g_hash_table_destroy(modems);
-			return TRUE;
-		}
-
-		path = _ps_modem_ref_path(value);
-		g_hash_table_insert(modems, g_strdup(path), properties);
-		dbg("modem (%p) inserted into hash", value);
-	}
-
-	dbus_g_method_return(context, modems);
-	g_hash_table_destroy(modems);
-
-	return TRUE;
-}
-
-gboolean ps_iface_master_get_profile_list(PsMaster *master, DBusGMethodInvocation *context)
-{
-	int index = 0;
-	GError *error = NULL;
-	GHashTableIter iter;
-	gpointer key, value;
-
-	guint len =0;
-	gchar **strv = NULL;
 	GHashTable *contexts = NULL;
-	GSList *profiles = NULL;
+
+	dbg("send dbus %s requeset", request);
 
 	contexts = _ps_context_ref_hashtable();
 	if (contexts == NULL) {
 		err("no profiles");
-		g_set_error(&error, PS_ERROR, PS_ERR_NO_PROFILE, "profile does not exists");
-		dbus_g_method_return_error(context, error);
-		return TRUE;
+		return;
 	}
 
 	g_hash_table_iter_init(&iter, contexts);
@@ -250,164 +60,74 @@ gboolean ps_iface_master_get_profile_list(PsMaster *master, DBusGMethodInvocatio
 
 		s_path = _ps_context_ref_path(value);
 		dbg("key(%s), value(%p), path(%s)", (gchar *)key, value, s_path);
-		if(s_path)
-			profiles = g_slist_append(profiles, g_strdup((const gchar*)s_path));
+		if (!g_strcmp0(request, "InterfaceDown")) {
+			_ps_context_handle_ifacedown(value);
+		} else if (!g_strcmp0(request, "InterfaceUp")) {
+			_ps_context_handle_ifaceup(value);
+		}
 	}
-
-	if (profiles == NULL) {
-		err("no profiles");
-		g_set_error(&error, PS_ERROR, PS_ERR_NO_PROFILE, "profile does not exists");
-		dbus_g_method_return_error(context, error);
-		return TRUE;
-	}
-
-	len = g_slist_length(profiles);
-	strv = g_new(gchar *, len+1);
-
-	do{
-		strv[index] = g_strdup(profiles->data);
-		index++;
-	}while(  (profiles = g_slist_next(profiles)) );
-	strv[index] = NULL;
-
-	dbus_g_method_return(context, strv);
-	g_strfreev(strv);
-	profiles = g_slist_nth(profiles, 0);
-	g_slist_free_full(profiles, g_free);
-	return TRUE;
+	return;
 }
+#endif
 
-gboolean ps_iface_master_add_profile(PsMaster *master, GHashTable *profile_property,
-		gboolean *result, GError **error)
+void __remove_master(gpointer data, gpointer user_data)
 {
-	GHashTableIter iter;
-	gpointer key, value;
-	gboolean rv = FALSE;
-	gchar *operator = NULL;
+	PsMaster *master = data;
 
-	dbg("add profile request");
+	dbg("Entered");
 
-	g_hash_table_iter_init(&iter, master->modems);
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
-		operator = _ps_modem_ref_operator(value);
-		if(operator)
-			break;
-	}
+	/* Need to remove the compelete hash table */
+	g_hash_table_remove_all(master->modems);
 
-	if(!operator){
-		dbg("there is no active modem");
-		g_set_error(error, PS_ERROR, PS_ERR_INTERNAL,"fail to add profile");
-		*result = FALSE;
-		return TRUE;
-	}
+	/* Need to UNexport and Unref the master Object */
+	g_dbus_interface_skeleton_unexport(G_DBUS_INTERFACE_SKELETON(master->if_obj));
 
-	rv = _ps_context_add_context(value, operator, profile_property);
-	if(rv != TRUE){
-		g_set_error(error, PS_ERROR, PS_ERR_INTERNAL,"fail to add profile");
-		*result = FALSE;
-		return TRUE;
-	}
+	g_object_unref(master->if_obj);
 
-	dbg("success to add profile");
-	*result = TRUE;
+	/* Need to free the memory allocated for the members of the master */
+	g_free(master->path);
+	g_free(master);
 
-	return TRUE;
-}
-
-gboolean ps_iface_master_reset_profile(PsMaster *master, gboolean *result, GError **error)
-{
-	GHashTableIter iter;
-	gpointer key, value;
-	gboolean rv = FALSE;
-	int b_check = 0;
-
-	*result = TRUE;
-
-	dbg("reset profile request");
-
-	if (master->modems == NULL) {
-		dbg("modem does not exist");
-		g_set_error(error, PS_ERROR, PS_ERR_INTERNAL, "fail to get modem");
-		*result = FALSE;
-		return TRUE;
-	}
-
-	b_check = access("/opt/system/csc-default/data/csc-default-data-connection.ini", F_OK);
-	if( b_check != 0 ){
-		dbg("csc file was not there");
-		g_set_error(error, PS_ERROR, PS_ERR_INTERNAL, "no csc data file");
-		*result = FALSE;
-		return TRUE;
-	}
-
-	g_hash_table_iter_init(&iter, master->modems);
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
-		dbg("key(%s), value(%p) context", key, value);
-		_ps_modem_processing_power_enable(value, FALSE);
-		_ps_modem_set_sim_enabled(value, FALSE);
-	}
-
-	_ps_context_reset_hashtable();
-	_ps_context_reset_profile_table();
-	rv = _ps_context_fill_profile_table_from_ini_file();
-
-	g_hash_table_iter_init(&iter, master->modems);
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
-		_ps_get_co_modem_values(value);
-	}
-
-	if(!rv){
-		dbg("csc data was wrong");
-		g_set_error(error, PS_ERROR, PS_ERR_INTERNAL, "fail to load csc data");
-		*result = FALSE;
-	}
-
-	return TRUE;
+	dbg("Exiting");
+	return;
 }
 
 static void __ps_master_emit_modem_added_signal(PsMaster *master, gpointer modem)
 {
-	GHashTable *properties = NULL;
+	GVariant *gv = NULL;
+	GVariantBuilder properties;
 
-	properties = g_hash_table_new(g_str_hash, g_str_equal);
-	_ps_modem_get_properties(modem, properties);
-	g_signal_emit(master, signals[SIG_MASTER_MODEM_ADDED], 0, properties);
-	dbg("master (%p) emit the modem(%p) added signal", master, modem);
-	g_hash_table_destroy(properties);
+	dbg("get modem properties");
+
+	gv = _ps_modem_get_properties(modem, &properties);
+	packet_service_master_emit_modem_added(master->if_obj,gv);
+
+	dbg("Exiting");
 	return;
 }
 
-/*static void __ps_master_emit_modem_removed_signal(PsMaster *master, gpointer modem)
+/*
+static void __ps_master_emit_modem_removed_signal(PsMaster *master, gpointer modem)
 {
 	g_signal_emit(master, signals[SIG_MASTER_MODEM_REMOVED], 0, _ps_modem_ref_path(modem));
 	dbg("master (%p) emit the modem(%p) removed signal", master, modem);
 	return;
-}*/
-
-static void __remove_modem(gpointer data)
-{
-	dbg("remove modem (%p)", data);
-	return;
 }
+*/
 
-static void __ps_master_register_key_callback(gpointer object, enum tcore_storage_key key)
+static void __ps_master_register_key_callback(gpointer object, TcoreStorageKey key)
 {
-	gpointer handle = NULL;
 	PsMaster *master = (PsMaster *) object;
 	Server *s = tcore_plugin_ref_server(master->plg);
-	static Storage *strg;
+	TcoreStorage *strg = NULL;
 
 	strg = tcore_server_find_storage(s, "vconf");
-	handle = tcore_storage_create_handle(strg, "vconf");
-	if (!handle)
-		err("fail to create vconf handle");
-
 	tcore_storage_set_key_callback(strg, key, __ps_master_storage_key_callback, object);
 
 	return;
 }
 
-static void __ps_master_storage_key_callback(enum tcore_storage_key key, void *value, void *user_data)
+static void __ps_master_storage_key_callback(TcoreStorageKey key, void *value, void *user_data)
 {
 	GVariant *tmp = NULL;
 	GHashTableIter iter;
@@ -419,13 +139,13 @@ static void __ps_master_storage_key_callback(enum tcore_storage_key key, void *v
 	g_return_if_fail(master != NULL);
 
 	tmp = (GVariant *)value;
-	if(!tmp){
+	if (!tmp) {
 		err("value is null");
 		return;
 	}
 
 	type_check = g_variant_is_of_type(tmp, G_VARIANT_TYPE_BOOLEAN);
-	if(!type_check){
+	if (!type_check) {
 		err("wrong variant data type");
 		g_variant_unref(tmp);
 		return;
@@ -433,11 +153,10 @@ static void __ps_master_storage_key_callback(enum tcore_storage_key key, void *v
 
 	g_hash_table_iter_init(&iter, master->modems);
 	while (g_hash_table_iter_next(&iter, &h_key, &h_value) == TRUE) {
-		if(key == KEY_3G_ENABLE){
+		if(key == STORAGE_KEY_DATA_ENABLE) {
 			gboolean data_allowed = g_variant_get_boolean(tmp);
 			_ps_modem_set_data_allowed(h_value, data_allowed);
-		}
-		else if(key == KEY_DATA_ROAMING_SETTING){
+		} else if(key == STORAGE_KEY_SETAPPL_STATE_DATA_ROAMING) {
 			gboolean roaming_allowed = g_variant_get_boolean(tmp);
 			_ps_modem_set_data_roaming_allowed(h_value, roaming_allowed);
 		}
@@ -447,119 +166,406 @@ static void __ps_master_storage_key_callback(enum tcore_storage_key key, void *v
 	return;
 }
 
-gpointer _ps_master_create_master(DBusGConnection *conn, TcorePlugin *p)
+gpointer _ps_master_create_master(GDBusConnection *conn, TcorePlugin *p)
 {
-	guint rv;
-	GObject *object;
-	DBusGProxy *proxy;
+	PacketServiceMaster *master = NULL;
+	PsMaster *new_master = NULL;
 	GError *error = NULL;
 
 	dbg("master object create");
-	g_return_val_if_fail(conn != NULL, NULL);
+	tcore_check_return_value(conn != NULL, NULL);
 
-	proxy = dbus_g_proxy_new_for_name(conn, "org.freedesktop.DBus", "/org/freedesktop/DBus",
-			"org.freedesktop.DBus");
+	/* creating the master object for the interface com.tcore.ps.master */
+	master = packet_service_master_skeleton_new();
+	tcore_check_return_value(master != NULL, NULL);
 
-	if (!dbus_g_proxy_call(proxy, "RequestName", &error, G_TYPE_STRING, PS_DBUS_SERVICE,
-			G_TYPE_UINT, 0, G_TYPE_INVALID, G_TYPE_UINT, &rv, G_TYPE_INVALID)) {
-		err("Failed to acquire service(%s) error(%s)", PS_DBUS_SERVICE, error->message);
-		return NULL;
+
+	/* Initializing the master list for internal referencing */
+	new_master = g_try_malloc0(sizeof(PsMaster));
+	if (NULL == new_master) {
+		err("Unable to allocate memory for master");
+		goto FAILURE;
 	}
 
-	object = g_object_new(PS_TYPE_MASTER, "plg", p, "conn", conn, "path", PS_MASTER_PATH, NULL);
-	dbus_g_connection_register_g_object(conn, PS_MASTER_PATH, object);
-	msg("	master(%p) register dbus path(%s)", object, PS_MASTER_PATH);
+	new_master->conn = conn;
+	new_master->path = g_strdup(PS_MASTER_PATH);
+	new_master->plg = p;
+	new_master->if_obj = master;
+	new_master->modems =
+		g_hash_table_new_full(g_str_hash, g_str_equal,
+			g_free, __remove_modem_handler);
 
-	__ps_master_register_key_callback(object, KEY_3G_ENABLE);
-	__ps_master_register_key_callback(object, KEY_DATA_ROAMING_SETTING);
+	/* Setting Up the call backs for the interface */
+	_ps_master_setup_interface(master, new_master);
 
-	return object;
+	/* exporting the interface object to the path mention for master */
+	g_dbus_interface_skeleton_export(G_DBUS_INTERFACE_SKELETON(master),
+			conn, PS_MASTER_PATH, &error);
+	g_assert_no_error (error);
+
+	/* Registering the key callbacks for values in storage settings */
+	__ps_master_register_key_callback(new_master,
+		STORAGE_KEY_DATA_ENABLE);
+	__ps_master_register_key_callback(new_master,
+		STORAGE_KEY_SETAPPL_STATE_DATA_ROAMING);
+
+	/* Adding Hook for modem addition laters */
+	tcore_server_add_notification_hook(tcore_plugin_ref_server(p),
+		TCORE_SERVER_NOTIFICATION_ADDED_MODEM_PLUGIN,
+		__on_hook_modem_added, new_master);
+
+	dbg("Successfully created the master");
+	return new_master;
+
+FAILURE:
+	err("Unable to create master");
+	g_object_unref(master);
+	return NULL;
 }
 
 gboolean _ps_master_create_modems(gpointer object)
 {
 	Server *s = NULL;
 	GSList *plist = NULL;
-	gpointer modem = NULL, tmp = NULL;
 	PsMaster *master = NULL;
-	gboolean ret = FALSE;
+
+	TcorePlugin *plugin;
+	gchar *modem_name;
+	CoreObject *co_modem;
+	gpointer modem, modem_node;
 
 	dbg("create modem objects");
-	g_return_val_if_fail(object != NULL, FALSE);
+	tcore_check_return_value(object != NULL, FALSE);
 
-	master = (PsMaster *) object;
+	master = (PsMaster *)object;
 	s = tcore_plugin_ref_server(master->plg);
-	plist = tcore_server_ref_plugins(s);
-
-	if (NULL == plist) {
-		dbg("fail to get plugin-in list.");
-		return FALSE;
-	}
-
-	for (; plist != NULL; plist = g_slist_next(plist)) {
-		TcorePlugin *p = NULL;
-		CoreObject *co_modem = NULL;
-		gchar *modem_name = NULL;
-
-		p = plist->data;
-
-		/* AT Standard Plug-in is not considered */
-		if ((p == NULL)
-				|| (strcmp(tcore_plugin_ref_plugin_name(p), "AT") == 0))
+	plist = tcore_server_get_modem_plugin_list(s);
+	for (; plist; plist = plist->next) {
+		plugin = plist->data;
+		co_modem = tcore_plugin_ref_core_object(plugin, CORE_OBJECT_TYPE_MODEM);
+		if (co_modem == NULL)
 			continue;
 
-		co_modem = tcore_plugin_ref_core_object(p, CORE_OBJECT_TYPE_MODEM);
-		if (!co_modem)
-			continue;
+		dbg("create modem objects %p", co_modem);
+		modem_name = g_strdup_printf("/%s",
+		tcore_server_get_cp_name_by_plugin(plugin));
 
-		modem_name = g_strdup_printf("/%s", tcore_server_get_cp_name_by_plugin(p));
-		tmp = g_hash_table_lookup(master->modems, modem_name);
-		if (tmp != NULL) {
-			dbg("modem (%p) already existed", tmp);
+		modem_node = g_hash_table_lookup(master->modems, modem_name);
+		if (modem_node != NULL) {
+			dbg("modem '%s' already exists", modem_name);
+			g_free(modem_name);
+
 			continue;
 		}
 
-		modem = _ps_modem_create_modem(master->conn, master->plg, master, modem_name, co_modem);
+		/*  Create Modem */
+		modem = _ps_modem_create_modem(master->conn,
+		master->plg, master, modem_name, co_modem);
 		if (modem == NULL) {
-			dbg("fail to create modem");
+			err("Failed to Create modem '%s'", modem_name);
+			g_free(modem_name);
+
 			return FALSE;
 		}
 
 		g_hash_table_insert(master->modems, g_strdup(modem_name), modem);
-		dbg("modem (%p) created", modem);
+		dbg("Created modem '%s'", modem_name);
 
+		/*  Emit signal: Modem added */
 		__ps_master_emit_modem_added_signal(master, modem);
 
 		g_free(modem_name);
-
-		ret = TRUE;
 	}
 
-	return ret;
+	return TRUE;
 }
 
-gboolean _ps_master_get_storage_value(gpointer object, enum tcore_storage_key key)
+gboolean _ps_master_get_storage_value_bool(gpointer object, TcoreStorageKey key)
 {
 	Server *s = NULL;
-	Storage *strg = NULL;
+	TcoreStorage *strg = NULL;
 	PsMaster *master = object;
 
-	g_return_val_if_fail(master != NULL, FALSE);
+	tcore_check_return_value(master != NULL, FALSE);
 	s = tcore_plugin_ref_server(master->plg);
 	strg = tcore_server_find_storage(s, "vconf");
 
 	return tcore_storage_get_bool(strg, key);
 }
 
-gboolean _ps_master_set_storage_value(gpointer object, enum tcore_storage_key key, gboolean value)
+gint _ps_master_get_storage_value_int(gpointer object, TcoreStorageKey  key)
 {
 	Server *s = NULL;
-	Storage *strg = NULL;
+	TcoreStorage *strg = NULL;
 	PsMaster *master = object;
 
-	g_return_val_if_fail(master != NULL, FALSE);
+	tcore_check_return_value(master != NULL, FALSE);
+	s = tcore_plugin_ref_server(master->plg);
+	strg = tcore_server_find_storage(s, "vconf");
+
+	return tcore_storage_get_int(strg, key);
+}
+
+gboolean _ps_master_set_storage_value_bool(gpointer object,TcoreStorageKey key, gboolean value)
+{
+	Server *s = NULL;
+	TcoreStorage *strg = NULL;
+	PsMaster *master = object;
+
+	tcore_check_return_value(master != NULL, FALSE);
 	s = tcore_plugin_ref_server(master->plg);
 	strg = tcore_server_find_storage(s, "vconf");
 
 	return tcore_storage_set_bool(strg, key, value);
+}
+
+gboolean _ps_master_set_storage_value_int(gpointer object, TcoreStorageKey key, gint value)
+{
+	Server *s = NULL;
+	TcoreStorage *strg = NULL;
+	PsMaster *master = object;
+
+	tcore_check_return_value(master != NULL, FALSE);
+	s = tcore_plugin_ref_server(master->plg);
+	strg = tcore_server_find_storage(s, "vconf");
+
+	return tcore_storage_set_int(strg, key, value);
+}
+
+static gboolean on_master_get_modems (PacketServiceMaster *obj_master,
+	GDBusMethodInvocation *invocation, gpointer user_data)
+{
+	GVariantBuilder b_modem;
+	GVariant *modems;
+
+	GHashTableIter iter;
+	gpointer key, value;
+	PsMaster *master = user_data;
+
+	dbg("Entered");
+	if (master->modems == NULL) {
+		err("No modem Present");
+		FAIL_RESPONSE(invocation, PS_ERR_INTERNAL);
+		return TRUE;
+	}
+
+	g_variant_builder_init(&b_modem,G_VARIANT_TYPE("a{sa{ss}}"));
+
+	g_hash_table_iter_init(&iter, master->modems);
+	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+		gchar *path = NULL;
+
+		path = _ps_modem_ref_path(value);
+		dbg("modem path [%s]",path);
+
+		g_variant_builder_open(&b_modem, G_VARIANT_TYPE("{sa{ss}}"));
+		g_variant_builder_add(&b_modem, "s", g_strdup(path));
+		if (FALSE == _ps_modem_get_properties_handler(value, &b_modem)) {
+			err("Unable to get the modem properties");
+			g_variant_builder_close(&b_modem);
+			FAIL_RESPONSE(invocation, PS_ERR_INTERNAL);
+			return TRUE;
+		}
+		g_variant_builder_close(&b_modem);
+	}
+	modems = g_variant_builder_end(&b_modem);
+
+	packet_service_master_complete_get_modems(obj_master, invocation, modems);
+	return TRUE;
+}
+
+static gboolean on_master_get_profile_list (PacketServiceMaster *obj_master,
+	GDBusMethodInvocation *invocation, gpointer user_data)
+{
+	int index = 0;
+	GHashTableIter iter;
+	gpointer key, value;
+
+	guint len =0;
+	gchar **strv = NULL;
+	GHashTable *contexts = NULL;
+	GSList *profiles = NULL;
+
+	dbg("master get the profile list");
+
+	contexts = _ps_context_ref_hashtable();
+	if (contexts == NULL) {
+		err("no profiles");
+		FAIL_RESPONSE(invocation, PS_ERR_NO_PROFILE);
+		return TRUE;
+	}
+
+	g_hash_table_iter_init(&iter, contexts);
+	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+		gchar *s_path = NULL;
+
+		s_path = _ps_context_ref_path(value);
+		dbg("key(%s), value(%p), path(%s)", (gchar *)key, value, s_path);
+		if (s_path)
+			profiles = g_slist_append(profiles, g_strdup((const gchar*)s_path));
+	}
+
+	if (profiles == NULL) {
+		err("no profiles");
+		FAIL_RESPONSE(invocation, PS_ERR_NO_PROFILE);
+		return TRUE;
+	}
+
+	len = g_slist_length(profiles);
+	strv = g_new(gchar *, len+1);
+
+	while (profiles) {
+		strv[index] = g_strdup(profiles->data);
+		index++;
+
+		profiles = profiles->next;
+	}
+	strv[index] = NULL;
+
+	packet_service_master_complete_get_profile_list(obj_master,
+				invocation,(const gchar *const *)strv);
+
+	g_strfreev(strv);
+	profiles = g_slist_nth(profiles, 0);
+	g_slist_free_full(profiles, g_free);
+	return TRUE;
+}
+
+static gboolean on_master_add_profile (PacketServiceMaster *obj_master,
+	GDBusMethodInvocation *invocation,
+	GVariant *property, gpointer user_data)
+{
+	GVariantIter g_iter;
+	gchar *g_value;
+	gchar *g_key;
+
+	GHashTableIter iter;
+	gpointer key, value;
+	gboolean rv = FALSE;
+	gchar *operator = NULL;
+	PsMaster *master = user_data;
+	GHashTable *profile_property =
+		g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+
+	dbg("add profile request");
+
+	g_hash_table_iter_init(&iter, master->modems);
+	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+		operator = _ps_modem_ref_operator(value);
+		if (operator)
+			break;
+	}
+
+	if (!operator) {
+		err("there is no active modem");
+		FAIL_RESPONSE(invocation, PS_ERR_INTERNAL);
+		return TRUE;
+	}
+
+	/* Create a hash table for the profile property as all fucntion already use ghash table */
+	g_variant_iter_init (&g_iter, property);
+	while (g_variant_iter_next (&g_iter, "{ss}", &g_key, &g_value)) {
+		dbg(" '%s' value '%s'", g_key, g_value);
+
+		g_hash_table_insert(profile_property, g_strdup(g_key), g_strdup(g_value));
+
+		/*  must free data for ourselves */
+		g_free (g_value);
+		g_free (g_key);
+	}
+
+	rv = _ps_context_add_context(value, operator, profile_property);
+	if (rv != TRUE) {
+		err("Failed to add the Profile");
+		FAIL_RESPONSE(invocation, PS_ERR_INTERNAL);
+		return TRUE;
+	}
+
+	packet_service_master_complete_add_profile(obj_master, invocation, TRUE);
+
+	g_hash_table_destroy(profile_property);
+	return TRUE;
+}
+
+static gboolean on_master_reset_profile (PacketServiceMaster *obj_master,
+	GDBusMethodInvocation *invocation,
+	gint type, gpointer user_data)
+{
+	GHashTableIter iter;
+	gpointer key, value;
+	gboolean rv = FALSE;
+	int b_check = 0;
+	PsMaster *master = user_data;
+
+	dbg("reset profile request type(%d)", type);
+
+	if (master->modems == NULL) {
+		err("modem does not exist");
+		FAIL_RESPONSE(invocation,PS_ERR_INTERNAL);
+		return TRUE;
+	}
+
+	if (type == 0) {
+		b_check = access("/opt/system/csc-default/data/csc-default-data-connection.ini", F_OK);
+		if (b_check != 0 ) {
+			err("csc file was not there");
+			FAIL_RESPONSE(invocation,PS_ERR_INTERNAL);
+			return TRUE;
+		}
+	}
+
+	g_hash_table_iter_init(&iter, master->modems);
+	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+		err("key(%s), value(%p) context", key, value);
+		_ps_modem_processing_power_enable(value, FALSE);
+		_ps_modem_set_sim_enabled(value, FALSE);
+	}
+
+	dbg("Reseting the hash table");
+	_ps_context_reset_hashtable();
+
+	if (type == 0) {
+		_ps_context_reset_profile_table();
+		rv = _ps_context_fill_profile_table_from_ini_file();
+	}
+
+	g_hash_table_iter_init(&iter, master->modems);
+	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+		_ps_get_co_modem_values(value);
+	}
+
+	if (type == 0 && !rv) {
+		err("csc data was wrong");
+		FAIL_RESPONSE(invocation, PS_ERR_INTERNAL);
+		return TRUE;
+	}
+
+	packet_service_master_complete_reset_profile(obj_master, invocation, TRUE);
+	return TRUE;
+}
+
+static void _ps_master_setup_interface(PacketServiceMaster *master,
+	PsMaster *master_data)
+{
+	dbg("Entered");
+
+	g_signal_connect (master,
+		"handle-get-modems",
+		G_CALLBACK (on_master_get_modems),
+		master_data);
+
+	g_signal_connect (master,
+		"handle-get-profile-list",
+		G_CALLBACK (on_master_get_profile_list),
+		master_data);
+
+	g_signal_connect (master,
+		"handle-add-profile",
+		G_CALLBACK (on_master_add_profile),
+		master_data);
+
+	g_signal_connect (master,
+		"handle-reset-profile",
+		G_CALLBACK (on_master_reset_profile),
+		master_data);
 }
