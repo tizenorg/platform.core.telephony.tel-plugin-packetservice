@@ -16,36 +16,30 @@
  * limitations under the License.
  */
 
-#include <glib.h>
+#include "ps.h"
 
 #include <tcore.h>
 #include <server.h>
 #include <plugin.h>
 #include <storage.h>
-#include <util.h>
 #include <co_ps.h>
+#include <co_context.h>
 #include <co_modem.h>
 #include <co_sim.h>
 #include <co_network.h>
 
-#include <util.h>
-
-#include "packet-services.h"
-
 static TcoreHookReturn __on_hook_call_status(TcorePlugin *plugin,
 	TcoreNotification command, guint data_len, void *data, void *user_data)
-
 {
 	gpointer service = user_data;
 	TcorePsCallStatusInfo *cstatus = NULL;
 	gboolean netif_updown = FALSE;
+	gchar *ifname = NULL;
 	GSList *contexts;
 	CoreObject *co_context;
-	gchar *dev_name;
 	CoreObject *co;
 
 	dbg("Call Status event");
-
 	tcore_check_return_value(service != NULL, TCORE_HOOK_RETURN_STOP_PROPAGATION);
 	co = tcore_plugin_ref_core_object(plugin, CORE_OBJECT_TYPE_PS);
 
@@ -54,8 +48,8 @@ static TcoreHookReturn __on_hook_call_status(TcorePlugin *plugin,
 
 	dbg("Context ID: [%d] Call State: [%s]", cstatus->context_id,
 		((cstatus->state == TCORE_PS_CALL_STATE_CTX_DEFINED) ? "DEFINED"
-			: (cstatus->state == TCORE_PS_CALL_STATE_CONNECTED) ? "CONNECTED"
-			: "NOT CONNECTED"));
+		: (cstatus->state == TCORE_PS_CALL_STATE_CONNECTED) ? "CONNECTED"
+		: "NOT CONNECTED"));
 
 	if (cstatus->state == TCORE_PS_CALL_STATE_CTX_DEFINED)
 		goto out;
@@ -74,41 +68,38 @@ static TcoreHookReturn __on_hook_call_status(TcorePlugin *plugin,
 		}
 
 		/* Get Interface name */
-		tcore_context_get_ipv4_devname(co_context, &dev_name);
-		if (dev_name == NULL) {
+		tcore_context_get_ipv4_devname(co_context, &ifname);
+		if (ifname == NULL) {
 			dbg("Interface name is NULL");
 			continue;
 		}
 
 		/* Setup network interface */
-		if (tcore_util_netif(dev_name, netif_updown)
-					!= TEL_RETURN_SUCCESS) {
+		if (tcore_util_netif(ifname, netif_updown)
+				!= TEL_RETURN_SUCCESS) {
 			g_slist_free(contexts);
 			err("Failed to setup interface - Interface name: [%s] Interface Status: [%s]",
-					dev_name, (netif_updown ? "UP" : "DOWN"));
-			g_free(dev_name);
+				ifname, (netif_updown ? "UP" : "DOWN"));
 		}
 		dbg("Successfully setup interface - Interface name: [%s] Interface Status: [%s]",
-				dev_name, (netif_updown ? "UP" : "DOWN"));
+			ifname, (netif_updown ? "UP" : "DOWN"));
 	}
-
 out:
 	//send activation event / deactivation event
-	if (cstatus->state == TCORE_PS_CALL_STATE_CTX_DEFINED) {			/* OK: PDP define is complete. */
+	if (cstatus->state == TCORE_PS_CALL_STATE_CTX_DEFINED) {
+		/* OK: PDP define is complete. */
 		dbg("Service - [READY TO ACTIVATE]");
 		_ps_service_set_ps_defined(service, TRUE, cstatus->context_id);
 		//_ps_service_connect_default_context(service);
-	}
-	else if (cstatus->state == TCORE_PS_CALL_STATE_CONNECTED) {		/* CONNECTED */
+	} else if (cstatus->state == TCORE_PS_CALL_STATE_CONNECTED) {
+		/* CONNECTED */
 		dbg("Service - [ACTIVATED]");
 		_ps_service_set_connected(service, cstatus->context_id, TRUE);
-	}
-	else if (cstatus->state == TCORE_PS_CALL_STATE_NOT_CONNECTED) {	/* NO CARRIER */
-		dbg("Service - [DEACTIVATED]");
+	} else if (cstatus->state == TCORE_PS_CALL_STATE_NOT_CONNECTED) {
+		/* NO CARRIER */
 		_ps_service_set_ps_defined(service, FALSE, cstatus->context_id);
 		_ps_service_set_connected(service, cstatus->context_id, FALSE);
 	}
-
 	return TCORE_HOOK_RETURN_CONTINUE;
 }
 
@@ -133,6 +124,7 @@ static TcoreHookReturn __on_hook_powered(TcorePlugin *plugin,
 {
 	gpointer modem = user_data;
 	TelModemPowerStatus *modem_power = NULL;
+
 	gboolean power = FALSE;
 
 	dbg("Powered event");
@@ -144,8 +136,10 @@ static TcoreHookReturn __on_hook_powered(TcorePlugin *plugin,
 		((*modem_power == TEL_MODEM_POWER_ON) ? "ONLINE"
 		: (*modem_power == TEL_MODEM_POWER_OFF) ? "OFFLINE" : "ERROR"));
 
-	if (*modem_power == TEL_MODEM_POWER_ON )
+	if ( *modem_power == TEL_MODEM_POWER_ON )
 		power = TRUE;
+	else
+		power = FALSE;
 
 	/* Process modem Power state */
 	_ps_modem_processing_power_enable(modem, power);
@@ -157,7 +151,7 @@ static TcoreHookReturn __on_hook_flight(TcorePlugin *plugin,
 	TcoreNotification command, guint data_len, void *data, void *user_data)
 {
 	gpointer modem = user_data;
-	gboolean *flight_mode;
+	gboolean *flight_mode = NULL;
 
 	dbg("Flight mode event");
 
@@ -182,9 +176,9 @@ static TcoreHookReturn __on_hook_net_register(TcorePlugin *plugin,
 	dbg("network register event called");
 	tcore_check_return_value(service != NULL, TCORE_HOOK_RETURN_STOP_PROPAGATION);
 
-	registration_status = (TelNetworkRegStatusInfo *) data;
+	registration_status = (TelNetworkRegStatusInfo *)data;
 	if (registration_status->ps_status == TEL_NETWORK_REG_STATUS_REGISTERED ||
-		registration_status->ps_status == TEL_NETWORK_REG_STATUS_ROAMING)
+			registration_status->ps_status == TEL_NETWORK_REG_STATUS_ROAMING)
 		ps_attached = TRUE;
 
 	_ps_service_processing_network_event(service, ps_attached, registration_status->ps_status);
@@ -201,7 +195,8 @@ static TcoreHookReturn __on_hook_sim_init(TcorePlugin *plugin,
 	TelSimCardStatusInfo *sim_data;
 	CoreObject *co_sim;
 
-	dbg("SIM INIT event");
+
+	dbg("sim init event called");
 	tcore_check_return_value(user_data != NULL, TCORE_HOOK_RETURN_STOP_PROPAGATION);
 
 	co_sim = tcore_plugin_ref_core_object(plugin, CORE_OBJECT_TYPE_SIM);
@@ -209,13 +204,14 @@ static TcoreHookReturn __on_hook_sim_init(TcorePlugin *plugin,
 	sim_data = (TelSimCardStatusInfo *)data;
 	dbg("SIM status: [0x%02x]", sim_data->status);
 
-	if (sim_data->status == TEL_SIM_STATUS_SIM_INIT_COMPLETED){
-		 TelSimImsiInfo *imsi = NULL;
-		 char plmn[(TEL_SIM_MCC_MNC_LEN_MAX * 2) + 1] = {0, }; //mcc+mnc
+	if( sim_data->status == TEL_SIM_STATUS_SIM_INIT_COMPLETED){
+		TelSimImsiInfo *imsi = NULL;
+		char plmn[(TEL_SIM_MCC_MNC_LEN_MAX * 2) + 1] = {0,}; //mcc+mnc
 
-		 tcore_sim_get_imsi(co_sim, &imsi);
-		 strncpy(plmn, imsi->mcc,strlen( imsi->mcc));
-		 strcat(plmn, imsi->mnc);
+		tcore_sim_get_imsi(co_sim, &imsi);
+		strncpy(plmn, imsi->mcc,strlen( imsi->mcc));
+		strcat(plmn, imsi->mnc);
+
 		_ps_modem_processing_sim_complete((gpointer)user_data, TRUE, plmn);
 		g_free(imsi);
 	}
@@ -228,19 +224,15 @@ gboolean _ps_hook_co_modem_event(gpointer modem)
 	CoreObject *co_modem;
 	tcore_check_return_value(modem != NULL, FALSE);
 
-	dbg("Hook Modem & SIM events");
-
+	dbg("Hooking modem and sim events");
 	co_modem = _ps_modem_ref_co_modem(modem);
 
 	tcore_plugin_add_notification_hook(tcore_object_ref_plugin(co_modem),
-		TCORE_NOTIFICATION_MODEM_POWER,
-		__on_hook_powered, modem);
+		TCORE_NOTIFICATION_MODEM_POWER, __on_hook_powered, modem);
 	tcore_plugin_add_notification_hook(tcore_object_ref_plugin(co_modem),
-		TCORE_NOTIFICATION_MODEM_FLIGHT_MODE,
-		__on_hook_flight, modem);
+		TCORE_NOTIFICATION_MODEM_FLIGHT_MODE, __on_hook_flight, modem);
 	tcore_plugin_add_notification_hook(tcore_object_ref_plugin(co_modem),
-		TCORE_NOTIFICATION_SIM_STATUS,
-		__on_hook_sim_init, modem);
+		TCORE_NOTIFICATION_SIM_STATUS, __on_hook_sim_init, modem);
 
 	return TRUE;
 }
@@ -253,21 +245,19 @@ gboolean _ps_get_co_modem_values(gpointer modem)
 
 	gboolean sim_init = FALSE, modem_powered = FALSE, flight_mode = FALSE;
 	TelSimCardStatus sim_status;
-	TelSimImsiInfo  *sim_imsi = NULL;
-	char plmn[(TEL_SIM_MCC_MNC_LEN_MAX + 1) * 2] = {0,}; //mcc+mnc
-
-	dbg("Extract modem values");
+	TelSimImsiInfo *sim_imsi = NULL;
+	gchar plmn[(TEL_SIM_MCC_MNC_LEN_MAX * 2) + 1] = {0,}; //mcc+mnc
 
 	tcore_check_return_value(modem != NULL, FALSE);
 
 	co_modem = _ps_modem_ref_co_modem(modem);
-	if (!co_modem) {
+	if (!co_modem){
 		err("invalid PsModem ");
 		return FALSE;
 	}
 
 	plg = tcore_object_ref_plugin(co_modem);
-	if (!plg) {
+	if (!plg){
 		err("invalid plugin");
 		return FALSE;
 	}
@@ -280,12 +270,11 @@ gboolean _ps_get_co_modem_values(gpointer modem)
 
 	/* SIM State */
 	tcore_sim_get_status(co_sim, &sim_status);
-	if(sim_status == TEL_SIM_STATUS_SIM_INIT_COMPLETED) {
+	if(sim_status == TEL_SIM_STATUS_SIM_INIT_COMPLETED){
 		sim_init = TRUE;
 
 		/*
-		 * If SIM State is initialized then fetch the Modem Power,
-		 * else wait for Modem Power Notification.
+		 * If sim is intialized then only fetch modem state
 		 */
 		tcore_modem_get_powered(co_modem, &modem_powered);
 	}
@@ -321,6 +310,8 @@ gboolean _ps_hook_co_network_event(gpointer service)
 	CoreObject *co_network;
 	tcore_check_return_value(service != NULL, FALSE);
 
+
+	dbg("Hook for network event");
 	co_network = _ps_service_ref_co_network(service);
 
 	tcore_plugin_add_notification_hook(tcore_object_ref_plugin(co_network),
@@ -334,9 +325,10 @@ gboolean _ps_get_co_network_values(gpointer service)
 {
 	CoreObject *co_network = NULL;
 	gboolean ps_attached = FALSE;
+	gboolean roam ;
+
 	TelNetworkRegStatus ps_status;
 	TelNetworkAct act;
-	gboolean roam;
 
 	tcore_check_return_value(service != NULL, FALSE);
 
@@ -349,7 +341,7 @@ gboolean _ps_get_co_network_values(gpointer service)
 	if (ps_status == TEL_NETWORK_REG_STATUS_REGISTERED)
 		ps_attached = TRUE;
 
-	_ps_service_set_roaming(service, roam);
+	_ps_service_set_roaming(service, roam );
 	_ps_service_set_ps_attached(service, ps_attached);
 	_ps_service_set_access_technology(service, act);
 
@@ -367,7 +359,8 @@ gboolean _ps_hook_co_ps_event(gpointer service)
 		TCORE_NOTIFICATION_PS_CALL_STATUS,
 		__on_hook_call_status, service);
 
-	tcore_plugin_add_notification_hook(tcore_object_ref_plugin(co_ps), TCORE_NOTIFICATION_PS_IPCONFIG,
+	tcore_plugin_add_notification_hook(tcore_object_ref_plugin(co_ps),
+		TCORE_NOTIFICATION_PS_IPCONFIG,
 		__on_hook_ipconfiguration, service);
 
 	return TRUE;
@@ -384,7 +377,8 @@ gboolean _ps_free_co_ps_event(gpointer service)
 		TCORE_NOTIFICATION_PS_CALL_STATUS,
 		__on_hook_call_status);
 
-	tcore_plugin_remove_notification_hook(tcore_object_ref_plugin(co_ps), TCORE_NOTIFICATION_PS_IPCONFIG,
+	tcore_plugin_remove_notification_hook(tcore_object_ref_plugin(co_ps),
+		TCORE_NOTIFICATION_PS_IPCONFIG,
 		__on_hook_ipconfiguration);
 
 	return TRUE;
@@ -400,6 +394,7 @@ gboolean _ps_free_co_network_event(gpointer service)
 	tcore_plugin_remove_notification_hook(tcore_object_ref_plugin(co_network),
 		TCORE_NOTIFICATION_NETWORK_REGISTRATION_STATUS,
 		__on_hook_net_register);
+
 	return TRUE;
 }
 
@@ -414,8 +409,10 @@ gboolean _ps_update_cellular_state_key(gpointer service)
 	strg = tcore_server_find_storage(s, "vconf");
 
 	cur_cell_state = _ps_service_check_cellular_state(service);
-	stored_cell_state = tcore_storage_get_int(strg,STORAGE_KEY_CELLULAR_STATE);
+	stored_cell_state = tcore_storage_get_int(strg, STORAGE_KEY_CELLULAR_STATE);
+
 	dbg("cellular state, current (%d), cur_cell_state (%d)", stored_cell_state, cur_cell_state);
+
 	if (stored_cell_state != (gint)cur_cell_state)
 		tcore_storage_set_int(strg, STORAGE_KEY_CELLULAR_STATE, cur_cell_state);
 

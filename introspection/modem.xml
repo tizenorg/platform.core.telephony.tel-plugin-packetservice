@@ -1,0 +1,19 @@
+<node>
+    <interface name="com.tcore.ps.modem">
+        <method name="GetProperties">
+            <arg  type="a{ss}" name="modem_property" direction="out" />
+        </method>
+        <method name="GetServices">
+            <arg  type="a{sa{ss}}" name="service_hash" direction="out" />
+        </method>
+        <signal name="PropertyChanged">
+            <arg type="a{ss}" name="modem_property" direction="out" />
+        </signal>
+        <signal name="ServiceAdded">
+            <arg type="a{ss}" name="service" direction="out" />
+        </signal>
+        <signal name="ServiceRemoved">
+            <arg  type="s" name="service_path" direction="out" />
+        </signal>
+    </interface>
+</node>

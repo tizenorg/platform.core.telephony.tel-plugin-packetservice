@@ -13,13 +13,16 @@ Source1001: 	tel-plugin-packetservice.manifest
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 BuildRequires:  cmake
+BuildRequires:  python
+BuildRequires:  python-xml
+BuildRequires:  pkgconfig(gio-2.0)
+BuildRequires:  pkgconfig(gio-unix-2.0)
 BuildRequires:  pkgconfig(glib-2.0)
-BuildRequires:  pkgconfig(dbus-glib-1)
-BuildRequires:  pkgconfig(dlog)
 BuildRequires:  pkgconfig(tcore)
 BuildRequires:  pkgconfig(iniparser)
 BuildRequires:  pkgconfig(libtzplatform-config)
-
+Requires(post): /sbin/ldconfig
+Requires(postun): /sbin/ldconfig
 %description
 Telephony Packet Service library
 
