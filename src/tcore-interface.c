@@ -172,17 +172,43 @@ static TcoreHookReturn __on_hook_net_register(TcorePlugin *plugin,
 	gpointer service = user_data;
 	gboolean ps_attached = FALSE;
 	TelNetworkRegStatusInfo *registration_status;
+	gboolean roaming_status = FALSE;
 
 	dbg("network register event called");
 	tcore_check_return_value(service != NULL, TCORE_HOOK_RETURN_STOP_PROPAGATION);
 
 	registration_status = (TelNetworkRegStatusInfo *)data;
-	if (registration_status->ps_status == TEL_NETWORK_REG_STATUS_REGISTERED ||
-			registration_status->ps_status == TEL_NETWORK_REG_STATUS_ROAMING)
+	switch (registration_status->ps_status) {
+	case TEL_NETWORK_REG_STATUS_ROAMING:
+		roaming_status = TRUE;
+	case TEL_NETWORK_REG_STATUS_REGISTERED: /* FALLTHROUGH */
 		ps_attached = TRUE;
+	break;
+	case TEL_NETWORK_REG_STATUS_DENIED: /* FALLTHROUGH */
+	case TEL_NETWORK_REG_STATUS_SEARCHING: /* FALLTHROUGH */
+	case TEL_NETWORK_REG_STATUS_UNKNOWN: /* FALLTHROUGH */
+	case TEL_NETWORK_REG_STATUS_UNREGISTERED: /* FALLTHROUGH */
+	default:
+		dbg("Network PS Status: [%d]", registration_status->ps_status);
+	break;
+	}
 
-	_ps_service_processing_network_event(service, ps_attached, registration_status->ps_status);
+  	/*
+  	 * Roaming status infered from CS Status is also applicable
+  	 * if PS Status doesn't communicate the same.
+  	 */
+	if (!roaming_status
+			&& (registration_status->cs_status
+			== TEL_NETWORK_REG_STATUS_ROAMING))
+		roaming_status = TRUE;
 
+	/* Set Roaming Status */
+	_ps_modem_set_roaming(_ps_service_ref_modem(service), roaming_status);
+
+	/* Process Network Registration event */
+	_ps_service_processing_network_event(service, ps_attached, roaming_status);
+
+	/* Set AcT */
 	dbg("act(%d)", registration_status->act);
 	_ps_service_set_access_technology(service, registration_status->act);
 

@@ -127,18 +127,23 @@ static gboolean __ps_service_check_connection_option(gpointer object, gpointer c
 {
 	gboolean b_connect = TRUE;
 	gboolean power, sim, data, flight;
-
-
 	PsService *service = object;
 
 	power = _ps_modem_get_power(service->p_modem);
-	sim = _ps_modem_get_sim_init(service->p_modem);
-	data = _ps_modem_get_data_allowed(service->p_modem);
-	flight = _ps_modem_get_flght_mode(service->p_modem);
 	b_connect &= power;
+
+	sim = _ps_modem_get_sim_init(service->p_modem);
 	b_connect &= sim;
+
+	data = _ps_modem_get_data_allowed(service->p_modem);
 	b_connect &= data;
+
+	if (service->roaming)
+		b_connect &= _ps_modem_get_data_roaming_allowed(service->p_modem);
+
+	flight = _ps_modem_get_flght_mode(service->p_modem);
 	b_connect &= !flight;
+
 	b_connect &= !service->restricted;
 
 	dbg("power(%d), sim init(%d), data allowed(%d), flight mode(%d) ",
@@ -655,13 +660,15 @@ gpointer _ps_service_return_default_context(gpointer object)
 	return NULL;
 }
 
-gboolean _ps_service_processing_network_event(gpointer object, gboolean ps_attached, gboolean roaming)
+gboolean _ps_service_processing_network_event(gpointer object,
+	gboolean ps_attached, gboolean roaming)
 {
 	PsService *service = object;
 	tcore_check_return_value(service != NULL, FALSE);
 
 	_ps_service_set_ps_attached(service, ps_attached);
 	_ps_update_cellular_state_key(service);
+
 	if (service->roaming != roaming) {
 		gboolean roaming_allowed = FALSE;
 		_ps_service_set_roaming(service, roaming);
@@ -900,6 +907,7 @@ TcorePsState _ps_service_check_cellular_state(gpointer object)
 	}
 
 	state = _ps_modem_get_data_roaming_allowed(service->p_modem);
+
 	if (service->roaming && !state) {
 		dbg("DATA ROAMING OFF");
 		return TCORE_PS_STATE_ROAMING_OFF;

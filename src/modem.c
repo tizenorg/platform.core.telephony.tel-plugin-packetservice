@@ -199,7 +199,7 @@ static void __ps_modem_get_ps_setting_from_storage(PsModem *object)
 
 	modem = (PsModem *) object;
 	key_3g_enable = _ps_master_get_storage_value_bool(modem->p_master, STORAGE_KEY_DATA_ENABLE);
-	key_roaming_allowed = _ps_master_get_storage_value_bool(modem->p_master, STORAGE_KEY_SVC_ROAM);
+	key_roaming_allowed = _ps_master_get_storage_value_bool(modem->p_master, STORAGE_KEY_SETAPPL_STATE_DATA_ROAMING);
 
 	_ps_modem_set_data_allowed(modem, key_3g_enable);
 
