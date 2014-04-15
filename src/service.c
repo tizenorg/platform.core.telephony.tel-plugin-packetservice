@@ -237,9 +237,6 @@ gboolean _ps_service_ref_context(gpointer object, gpointer context)
 	/* Setting service */
 	_ps_context_set_service(context, service);
 
-	/* Add Context to PS Core object */
-	tcore_ps_add_context(service->co_ps, (CoreObject *) _ps_context_ref_co_context(context));
-
 	/* Insert conetxt to Hash Table */
 	g_hash_table_insert(service->contexts, g_strdup(s_path), context);
 
@@ -282,9 +279,6 @@ gboolean _ps_service_ref_contexts(gpointer object, GHashTable *contexts, gchar *
 		/* Setting service */
 		_ps_context_set_service(value, service);
 
-		/* Add Context to PS Core object */
-		tcore_ps_add_context(service->co_ps, (CoreObject *) _ps_context_ref_co_context(value));
-
 		/* Insert context to Service  Hash Table */
 		g_hash_table_insert(service->contexts, g_strdup(s_path), value);
 
@@ -317,7 +311,7 @@ gboolean _ps_service_unref_context(gpointer object, gpointer context)
 	dbg("remove context(%p) from service(%p)", context, service);
 
 	/* Remove Context from PS Core object */
-	tcore_ps_remove_context(service->co_ps, (CoreObject *) _ps_context_ref_co_context(context));
+	//tcore_ps_remove_context(service->co_ps, (CoreObject *) _ps_context_ref_co_context(context));
 
 	/* Remove context to Hash Table */
 	g_hash_table_remove(service->contexts, _ps_context_ref_path(context));
@@ -585,7 +579,7 @@ void _ps_service_remove_contexts(gpointer object)
 		_ps_context_set_alwayson_enable(value, FALSE);
 		_ps_service_deactivate_context(service, value);
 		_ps_context_set_connected(value, FALSE);
-		tcore_ps_remove_context(service->co_ps, co_context);
+		//tcore_ps_remove_context(service->co_ps, co_context);
 		tcore_context_free(co_context);
 
 		__ps_service_emit_context_removed_signal(service, value);
