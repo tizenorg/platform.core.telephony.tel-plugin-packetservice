@@ -16,15 +16,9 @@
  * limitations under the License.
  */
 
-#include "generated-code.h"
+
 #include "ps.h"
-
-#include <glib.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <iniparser.h>
-#include <tzplatform_config.h>
-
+#include "generated-code.h"
 #include <tcore.h>
 #include <plugin.h>
 #include <server.h>
@@ -32,6 +26,9 @@
 #include <core_object.h>
 #include <co_ps.h>
 #include <co_context.h>
+
+#include <iniparser.h>
+#include <tzplatform_config.h>
 
 #define PROP_DEFAULT		FALSE
 #define PROP_DEFAULT_STR	NULL

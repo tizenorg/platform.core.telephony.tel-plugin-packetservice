@@ -293,19 +293,6 @@ gboolean _ps_master_get_storage_value_bool(gpointer object, TcoreStorageKey key)
 	return tcore_storage_get_bool(strg, key);
 }
 
-gint _ps_master_get_storage_value_int(gpointer object, TcoreStorageKey  key)
-{
-	Server *s = NULL;
-	TcoreStorage *strg = NULL;
-	PsMaster *master = object;
-
-	tcore_check_return_value(master != NULL, FALSE);
-	s = tcore_plugin_ref_server(master->plg);
-	strg = tcore_server_find_storage(s, "vconf");
-
-	return tcore_storage_get_int(strg, key);
-}
-
 gboolean _ps_master_set_storage_value_bool(gpointer object,TcoreStorageKey key, gboolean value)
 {
 	Server *s = NULL;
@@ -317,19 +304,6 @@ gboolean _ps_master_set_storage_value_bool(gpointer object,TcoreStorageKey key, 
 	strg = tcore_server_find_storage(s, "vconf");
 
 	return tcore_storage_set_bool(strg, key, value);
-}
-
-gboolean _ps_master_set_storage_value_int(gpointer object, TcoreStorageKey key, gint value)
-{
-	Server *s = NULL;
-	TcoreStorage *strg = NULL;
-	PsMaster *master = object;
-
-	tcore_check_return_value(master != NULL, FALSE);
-	s = tcore_plugin_ref_server(master->plg);
-	strg = tcore_server_find_storage(s, "vconf");
-
-	return tcore_storage_set_int(strg, key, value);
 }
 
 static gboolean on_master_get_modems (PacketServiceMaster *obj_master,
