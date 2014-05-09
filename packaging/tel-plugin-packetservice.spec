@@ -53,11 +53,13 @@ rm -f /usr/share/ps-plugin/dnet_db_data.sql
 if [ -f %{TZ_SYS_DB}/.dnet.db ]
 then
   chmod 660 %{TZ_SYS_DB}/.dnet.db
+  chsmack -a 'System' %{TZ_SYS_DB}/.dnet.db
 fi
 
 if [ -f %{TZ_SYS_DB}/.dnet.db-journal ]
 then
   chmod 664 %{TZ_SYS_DB}/.dnet.db-journal
+  chsmack -a 'System' %{TZ_SYS_DB}/.dnet.db-journal
 fi
 
 %postun -p /sbin/ldconfig
