@@ -1,19 +1,20 @@
 <node>
-    <interface name="com.tcore.ps.service">
-        <method name="GetProperties">
-            <arg  type="a{ss}" name="service_property" direction="out" />
-        </method>
-        <method name="GetContexts">
-            <arg  type="a{sa{ss}}" name="context_hash" direction="out" />
-        </method>
-        <signal name="PropertyChanged">
-            <arg type="a{ss}" name="service_property" direction="out" />
-        </signal>
-        <signal name="ContextAdded">
-            <arg type="a{ss}" name="context" direction="out" />
-        </signal>
-        <signal name="ContextRemoved">
-            <arg  type="s" name="context_path" direction="out" />
-        </signal>
-    </interface>
+	<interface name="com.tcore.ps.service">
+		<method name="GetProperties">
+			<arg  type="a{ss}" name="service_property" direction="out" />
+		</method>
+		<method name="GetContexts">
+			<arg  type="a{sa{ss}}" name="context_hash" direction="out" />
+		</method>
+		<signal name="PropertyChanged">
+			<arg type="a{ss}" name="service_property" direction="out" />
+		</signal>
+		<signal name="ContextAdded">
+			<arg type="a{ss}" name="context" direction="out" />
+		</signal>
+		<signal name="ContextRemoved">
+			<arg  type="s" name="context_path" direction="out" />
+		</signal>
+	</interface>
 </node>
+

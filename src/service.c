@@ -1,7 +1,10 @@
 /*
- * tel-plugin-packetservice
+ * PacketService Control Module
  *
- * Copyright (c) 2013 Samsung Electronics Co. Ltd. All rights reserved.
+ * Copyright (c) 2012 Samsung Electronics Co., Ltd. All rights reserved.
+ *
+ * Contact: DongHoo Park <donghoo.park@samsung.com>
+ *	    Arun Shukla <arun.shukla@samsung.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,6 +17,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 #include "ps.h"
@@ -22,33 +26,31 @@
 #include <core_object.h>
 #include <co_ps.h>
 #include <co_context.h>
-
+#include <storage.h>
 
 #define PROP_DEFAULT	FALSE
 #define PROP_DEFAULT_STR   NULL
-#define BOOL2STRING(a)	((a == TRUE) ? ("TRUE"):("FALSE"))
+#define BOOL2STRING(a)	((a==TRUE) ? ("TRUE"):("FALSE"))
 
 #define TIMEOUT_DEFAULT		5
-#define TIMEOUT_MAX			1280
+#define TIMEOUT_MAX			1800
 
-guint connection_timeout;
-guint timer_src;
 
-static void __ps_service_emit_property_changed_signal(PsService *service);
-static void __ps_service_emit_context_added_signal(PsService *service, gpointer context);
-static void __ps_service_emit_context_removed_signal(PsService *service, gpointer context);
-static void _ps_service_setup_interface(PacketServiceService *service, PsService *service_data);
+static void __ps_service_emit_property_changed_signal(ps_service_t *service);
+static void __ps_service_emit_context_added_signal(ps_service_t *service, gpointer context);
+static void __ps_service_emit_context_removed_signal(ps_service_t *service, gpointer context);
+static void _ps_service_setup_interface(PacketServiceService *service, ps_service_t *service_data);
 
-static char *__ps_service_act2string(TelNetworkAct act);
+static char *	__ps_service_act2string(enum telephony_network_access_technology act);
 static gboolean __ps_service_check_connection_option(gpointer service, gpointer context);
-static gboolean __ps_service_connetion_timeout_handler(gpointer user_data);
+static int __ps_service_connetion_timeout_handler(alarm_id_t alarm_id, void *context);
 
 void __remove_service_handler(gpointer data)
 {
-	PsService *service = data;
+	ps_service_t *service = data;
 
 	dbg("Entered");
-	if (!service) {
+	if(!service){
 		dbg("Service is Null");
 		return;
 	}
@@ -57,7 +59,7 @@ void __remove_service_handler(gpointer data)
 	g_hash_table_remove_all(service->contexts);
 
 	/*Need to UNexport and Unref the master Object */
-	if (service->if_obj) {
+	if(service->if_obj){
 		g_dbus_interface_skeleton_unexport(G_DBUS_INTERFACE_SKELETON(service->if_obj));
 		g_object_unref(service->if_obj);
 		service->if_obj = NULL;
@@ -66,56 +68,71 @@ void __remove_service_handler(gpointer data)
 	/*Need to free the memory of the internal structure*/
 	g_free(service->path);
 	g_free(service);
+
+	dbg("Exiting");
+	return;
 }
 
-static void __ps_service_emit_property_changed_signal(PsService *service)
+static void __ps_service_emit_property_changed_signal(ps_service_t *service)
 {
 	GVariant *gv = NULL;
 	GVariantBuilder property;
 
-	dbg("get service properties");
+	ps_dbg_ex_co(_ps_service_ref_co_network(service), "get service properties");
 
 	gv = _ps_service_get_properties(service, &property);
 	packet_service_service_emit_property_changed(service->if_obj, gv);
 
 	dbg("Exiting");
+	return;
 }
 
-static void __ps_service_emit_context_added_signal(PsService *service, gpointer context)
+static void __ps_service_emit_context_added_signal(ps_service_t *service, gpointer context)
 {
 	GVariant *gv = NULL;
 	GVariantBuilder property;
 
-	dbg("get service properties");
+	ps_dbg_ex_co(_ps_service_ref_co_network(service), "get service properties");
 
 	gv = _ps_context_get_properties(context, &property);
 	packet_service_service_emit_context_added(service->if_obj, gv);
 
 	dbg("Exiting");
+	return;
 }
 
-static void __ps_service_emit_context_removed_signal(PsService *service, gpointer context)
+static void __ps_service_emit_context_removed_signal(ps_service_t *service, gpointer context)
 {
-	PsContext *pscontext = context;
+	ps_context_t *pscontext = context;
 
 	dbg("Entered");
 	packet_service_service_emit_context_removed(service->if_obj, pscontext->path);
 
 	dbg("Exiting");
+	return;
 }
 
-static char *__ps_service_act2string(TelNetworkAct act)
+static char *__ps_service_act2string(enum telephony_network_access_technology act)
 {
 	switch (act) {
-		case TEL_NETWORK_ACT_GSM:
-		case TEL_NETWORK_ACT_GPRS:
-		case TEL_NETWORK_ACT_EGPRS:
-		case TEL_NETWORK_ACT_UMTS:
-		case TEL_NETWORK_ACT_GSM_AND_UMTS:
+		case NETWORK_ACT_GSM:
+		case NETWORK_ACT_GPRS:
+		case NETWORK_ACT_EGPRS:
+		case NETWORK_ACT_UMTS:
+		case NETWORK_ACT_GSM_UTRAN:
 			return "GSM";
-		case TEL_NETWORK_ACT_LTE:
+		case NETWORK_ACT_IS95A:
+		case NETWORK_ACT_IS95B:
+		case NETWORK_ACT_CDMA_1X:
+		case NETWORK_ACT_EVDO_REV0:
+		case NETWORK_ACT_CDMA_1X_EVDO_REV0:
+		case NETWORK_ACT_EVDO_REVA:
+		case NETWORK_ACT_CDMA_1X_EVDO_REVA:
+		case NETWORK_ACT_EVDV:
+			return "CDMA";
+		case NETWORK_ACT_LTE:
 			return "LTE";
-		case TEL_NETWORK_ACT_UNKNOWN:
+		case NETWORK_ACT_UNKNOWN:
 		default:
 			return "unknown";
 	}
@@ -126,42 +143,133 @@ static char *__ps_service_act2string(TelNetworkAct act)
 static gboolean __ps_service_check_connection_option(gpointer object, gpointer context)
 {
 	gboolean b_connect = TRUE;
-	gboolean power, sim, data, flight;
-	PsService *service = object;
+	gboolean power = FALSE, sim = FALSE, data = FALSE, flight = FALSE, nw_ops = FALSE;
+	gboolean profile_reset = FALSE;
 
-	power = _ps_modem_get_power(service->p_modem);
+	enum co_context_role role = CONTEXT_ROLE_UNKNOWN;
+	gint ps_mode;
+	guchar hook_flag;
+
+	ps_service_t *service = object;
+	ps_modem_t *modem = _ps_service_ref_modem(service);
+	CoreObject *co_context = context;
+	CoreObject *co_network = _ps_service_ref_co_network(service);
+
+	role = tcore_context_get_role(co_context);
+	if(service->roaming){
+		b_connect &=_ps_modem_get_data_roaming_allowed(modem);
+	}
+
+	sim = _ps_modem_get_sim_init(modem);
+	data = _ps_modem_get_data_allowed(modem);
+	flight = _ps_modem_get_flght_mode(modem);
+	hook_flag = _ps_modem_get_hook_flag(modem);
+	profile_reset = _ps_modem_get_reset_profile(modem);
+	if(hook_flag != PS_NO_PENDING_REQUEST)
+		nw_ops = TRUE;
+	if(PS_MODEM_STATE_ONLINE == _ps_modem_get_power(modem))
+		power = TRUE;
+
 	b_connect &= power;
-
-	sim = _ps_modem_get_sim_init(service->p_modem);
 	b_connect &= sim;
 
-	data = _ps_modem_get_data_allowed(service->p_modem);
-	b_connect &= data;
+#if defined(TIZEN_SUPPORT_MMS_CONNECT_FORCE)
+		ps_dbg_ex_co(co_network, "csc runtime feature enabled");
+		if(role != CONTEXT_ROLE_MMS && role != CONTEXT_ROLE_PREPAID_MMS){
+			b_connect &= data;
+		} else {
+			char *tmp_apn = NULL;
+			tmp_apn = tcore_context_get_apn(co_context);
+			dbg("csc runtime feature is enabled: apn[%s]", tmp_apn);
+			if(ps_feature_get_bool(PS_FEATURE_OPERATOR_SKT)) {
+				if(data)
+					tcore_context_set_apn(co_context, "web.sktelecom.com");
+				else
+					tcore_context_set_apn(co_context, "mmsonly.sktelecom.com");
+			}
+		}
+#else
+	if (role == CONTEXT_ROLE_IMS || role == CONTEXT_ROLE_IMS_EMERGENCY) {
+		dbg("Do not check data allowed value in case of IMS type");
+	} else {
+		ps_dbg_ex_co(co_network, "csc runtime feature disabled");
+		b_connect &= data;
+	}
+#endif
 
-	if (service->roaming)
-		b_connect &= _ps_modem_get_data_roaming_allowed(service->p_modem);
-
-	flight = _ps_modem_get_flght_mode(service->p_modem);
 	b_connect &= !flight;
-
+	b_connect &= !nw_ops;
 	b_connect &= !service->restricted;
+	b_connect &= !profile_reset;
+#ifndef TIZEN_PS_FORCE_ATTACH_DETACH
+	b_connect &= service->ps_attached;
+#endif
+	ps_mode = _ps_modem_get_psmode(modem);
 
-	dbg("power(%d), sim init(%d), data allowed(%d), flight mode(%d) ",
-		power, sim, data, flight);
+
+	if(service->initial_pdp_conn == FALSE) {
+		int wifi_state = PS_WIFI_STATE_OFF;
+		Server *s = NULL;
+		Storage *strg = NULL;
+
+		s = tcore_plugin_ref_server(service->plg);
+		strg = tcore_server_find_storage(s, "vconf");
+		wifi_state = tcore_storage_get_int(strg, KEY_WIFI_STATE);
+		if(wifi_state == PS_WIFI_STATE_CONNECTED) {
+			if (service->wifi_connected_checked == FALSE) {
+				ps_dbg_ex_co(co_network, "DO NOT set PDP retry timer when WiFi connected but PDP never been connected yet.");
+				b_connect &= FALSE;
+				service->wifi_connected_checked = TRUE;
+			} else {
+				ps_dbg_ex_co(co_network, "Wifi connected state was already checked.");
+			}
+		}
+	}
+	ps_dbg_ex_co(co_network, "b_connect(%d), power(%d), sim init(%d), data allowed(%d), flight mode(%d) restricted(%d) ps_attached(%d), ps_mode(%d), fook_flag(%d)",
+		b_connect, power, sim, data, flight, service->restricted, service->ps_attached, ps_mode, hook_flag);
 
 	return b_connect;
 }
 
-static gboolean __ps_service_connetion_timeout_handler(gpointer context)
+static int __ps_service_connetion_timeout_handler(alarm_id_t alarm_id, void *context)
 {
-	gint rv = 0;
-	PsService *service = NULL;
+	int rv = 0;
+	ps_service_t *service = _ps_context_ref_service(context);
+	if(service == NULL) {
+		err("service is NULL!!!");
+		return rv;
+	}
 
-	service = _ps_context_ref_service(context);
+	if (service->timer_src > 0) {
+		dbg("remove connection retry timer (%d)", service->timer_src);
+		alarmmgr_remove_alarm(service->timer_src);
+		service->timer_src = 0;
+	}
 	rv = _ps_service_activate_context(service, context);
-	dbg("return rv(%d)", rv);
+	ps_dbg_ex_co(_ps_service_ref_co_network(service), "return rv(%d)", rv);
+	return rv;
+}
 
-	return FALSE;
+static void __ps_service_set_attach_apn(ps_service_t *service)
+{
+	GHashTableIter iter;
+	gpointer key, ps_context;
+	CoreObject *co_context;
+	gboolean attach_apn = FALSE;
+	enum co_context_role role;
+
+	g_hash_table_iter_init(&iter, service->contexts);
+	while (g_hash_table_iter_next(&iter, &key, &ps_context) == TRUE) {
+		co_context = _ps_context_ref_co_context(ps_context);
+		role = tcore_context_get_role(co_context);
+		attach_apn = tcore_context_get_attach_apn(co_context);
+		if (attach_apn) {
+			dbg("Set 'Attach APN' [%p]", co_context);
+			if (role != CONTEXT_ROLE_INTERNET)
+				_ps_context_set_only_attach(ps_context, TRUE);
+			tcore_ps_define_context(service->co_ps, co_context, NULL);
+		}
+	}
 }
 
 gpointer _ps_service_create_service(GDBusConnection *conn, TcorePlugin *p, gpointer p_modem,
@@ -169,19 +277,19 @@ gpointer _ps_service_create_service(GDBusConnection *conn, TcorePlugin *p, gpoin
 {
 	PacketServiceService *service;
 	GError *error = NULL;
-	PsService *new_service;
+	ps_service_t *new_service;
 
-	dbg("service object create");
-	tcore_check_return_value(conn != NULL, NULL);
-	tcore_check_return_value(p_modem != NULL, NULL);
+	ps_dbg_ex_co(co_network, "service object create");
+	g_return_val_if_fail(conn != NULL, NULL);
+	g_return_val_if_fail(p_modem != NULL, NULL);
 
 	/*creating the master object for the interface com.tcore.ps.modem*/
 	service = packet_service_service_skeleton_new();
 
 	/*Initializing the modem list for internal referencing*/
-	new_service = g_try_malloc0(sizeof(PsService));
-	if (NULL == new_service) {
-		err("Unable to allocate memory for master");
+	new_service = g_try_malloc0(sizeof(ps_service_t));
+	if(NULL == new_service){
+		ps_err_ex_co(co_network, "Unable to allocate memory for master");
 		goto FAILURE;
 	}
 
@@ -194,6 +302,12 @@ gpointer _ps_service_create_service(GDBusConnection *conn, TcorePlugin *p, gpoin
 	new_service->if_obj = service;
 	new_service->contexts = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 
+	/*exporting the interface object to the path mention for master*/
+	if(TRUE != g_dbus_interface_skeleton_export((G_DBUS_INTERFACE_SKELETON(service)),	conn, path, &error)) {
+		ps_err_ex_co(co_network, "Failed to export interaface with message [%s] & ID[%d] ", error->message, error->code);
+		goto FAILURE;
+	}
+
 	_ps_hook_co_network_event(new_service);
 	_ps_get_co_network_values(new_service);
 	_ps_hook_co_ps_event(new_service);
@@ -201,20 +315,14 @@ gpointer _ps_service_create_service(GDBusConnection *conn, TcorePlugin *p, gpoin
 	/*Setting up the interface for the service */
 	_ps_service_setup_interface(service, new_service);
 
-	/*exporting the interface object to the path mention for master*/
-	g_dbus_interface_skeleton_export((G_DBUS_INTERFACE_SKELETON(service)),
-			conn,
-			path,
-			&error);
-
-	g_assert_no_error (error);
-
-	connection_timeout = TIMEOUT_DEFAULT;
-	dbg("Successfully Created the service");
+	new_service->connection_timeout = TIMEOUT_DEFAULT;
+	ps_dbg_ex_co(co_network, "Successfully Created the service");
 	return new_service;
 
 FAILURE:
 	/*To Do: Handle failure case*/
+	g_free(new_service);
+	g_assert_no_error (error);
 	return NULL;
 }
 
@@ -222,27 +330,25 @@ gboolean _ps_service_ref_context(gpointer object, gpointer context)
 {
 	gpointer tmp = NULL;
 	gchar *s_path = NULL;
-	PsService *service = object;
+	ps_service_t *service = object;
+	CoreObject *co_network = NULL;
 
 	dbg("service refer to context");
-	tcore_check_return_value(service != NULL, FALSE);
+	g_return_val_if_fail(service != NULL, FALSE);
 
+	co_network = _ps_service_ref_co_network(service);
 	s_path = _ps_context_ref_path(context);
 	tmp = g_hash_table_lookup(service->contexts, s_path);
 	if (tmp != NULL) {
-		dbg("context(%p) already existed", tmp);
+		ps_dbg_ex_co(co_network, "context(%p) already existed", tmp);
 		return FALSE;
 	}
 
-	/* Setting service */
 	_ps_context_set_service(context, service);
-
-	/* Insert conetxt to Hash Table */
+	tcore_ps_add_context(service->co_ps, (CoreObject *) _ps_context_ref_co_context(context));
 	g_hash_table_insert(service->contexts, g_strdup(s_path), context);
 
-	dbg("context(%p) insert to hash", context);
-
-	/* Emit Context added signal */
+	ps_dbg_ex_co(co_network, "context(%p) insert to hash", context);
 	__ps_service_emit_context_added_signal(service, context);
 
 	//_ps_service_connect_default_context(service);
@@ -253,13 +359,15 @@ gboolean _ps_service_ref_contexts(gpointer object, GHashTable *contexts, gchar *
 {
 	GHashTableIter iter;
 	gpointer key, value;
-	PsService *service = object;
+	ps_service_t *service = object;
 	gboolean ret = TRUE;
-	gint rv;
+	int rv;
+	CoreObject *co_network = NULL;
 
 	dbg("service refer to contexts");
-	tcore_check_return_value(service != NULL, FALSE);
+	g_return_val_if_fail(service != NULL, FALSE);
 
+	co_network = _ps_service_ref_co_network(service);
 	g_hash_table_iter_init(&iter, contexts);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 		gchar *s_path = NULL;
@@ -267,56 +375,42 @@ gboolean _ps_service_ref_contexts(gpointer object, GHashTable *contexts, gchar *
 		gboolean f_awo = FALSE;
 
 		s_path = _ps_context_ref_path(value);
-		dbg("Path: [%s]", s_path);
-
-		/* Hash lookup */
 		tmp = g_hash_table_lookup(service->contexts, s_path);
 		if (tmp != NULL) {
-			dbg("context(%p) already existed", tmp);
+			ps_dbg_ex_co(co_network, "context(%p) already existed", tmp);
 			continue;
 		}
 
-		/* Setting service */
 		_ps_context_set_service(value, service);
-
-		/* Insert context to Service  Hash Table */
+		tcore_ps_add_context(service->co_ps, (CoreObject *) _ps_context_ref_co_context(value));
 		g_hash_table_insert(service->contexts, g_strdup(s_path), value);
 
-		dbg("Inserted context to Hash table - context [%p]", value);
-
-		/* Emit Context added signal */
+		ps_dbg_ex_co(co_network, "context(%p) insert to hash", value);
 		__ps_service_emit_context_added_signal(service, value);
 
 		f_awo = _ps_context_get_alwayson_enable(value);
-		if (f_awo) {
+		if(f_awo){
 			rv = _ps_service_define_context(service, value);
-			dbg("return rv(%d)", rv);
+			ps_dbg_ex_co(co_network, "return rv(%d)", rv);
 		}
 	}
 
-	/* Update cellular state key */
 	_ps_update_cellular_state_key(service);
-
+	//_ps_service_connect_default_context(service);
 	return ret;
 }
 
 gboolean _ps_service_unref_context(gpointer object, gpointer context)
 {
-	PsService *service = object;
+	ps_service_t *service = object;
 
 	dbg("service unref contexts");
-	tcore_check_return_value(service != NULL, FALSE);
-	tcore_check_return_value(context != NULL, FALSE);
+	g_return_val_if_fail(service != NULL, FALSE);
+	g_return_val_if_fail(context != NULL, FALSE);
 
-	dbg("remove context(%p) from service(%p)", context, service);
-
-	/* Remove Context from PS Core object */
-	//tcore_ps_remove_context(service->co_ps, (CoreObject *) _ps_context_ref_co_context(context));
-
-	/* Remove context to Hash Table */
+	ps_dbg_ex_co(_ps_service_ref_co_network(service), "remove context(%p) from service(%p)", context, service);
+	tcore_ps_remove_context(service->co_ps, (CoreObject *) _ps_context_ref_co_context(context));
 	g_hash_table_remove(service->contexts, _ps_context_ref_path(context));
-
-	/* Emit Context Remove signal */
 	__ps_service_emit_context_removed_signal(service, context);
 
 	return TRUE;
@@ -324,262 +418,285 @@ gboolean _ps_service_unref_context(gpointer object, gpointer context)
 
 gboolean _ps_service_get_properties_handler(gpointer object, GVariantBuilder *properties)
 {
-	PsService *service = object;
+	ps_service_t *service = object;
 
 	dbg("get service properties");
-	tcore_check_return_value(service != NULL, FALSE);
-	tcore_check_return_value(properties != NULL, FALSE);
+	g_return_val_if_fail(service != NULL, FALSE);
+	g_return_val_if_fail(properties != NULL, FALSE);
 
 	g_variant_builder_open(properties, G_VARIANT_TYPE("a{ss}"));
-	g_variant_builder_add(properties, "{ss}", "path", g_strdup(service->path));
-	g_variant_builder_add(properties, "{ss}", "ps_attached", g_strdup(BOOL2STRING(service->ps_attached)));
-	g_variant_builder_add(properties, "{ss}", "roaming", g_strdup(BOOL2STRING(service->roaming)));
-	g_variant_builder_add(properties, "{ss}", "act", g_strdup(__ps_service_act2string(service->act)));
+	g_variant_builder_add(properties, "{ss}", "path", service->path);
+	g_variant_builder_add(properties, "{ss}", "ps_attached", BOOL2STRING(service->ps_attached));
+	g_variant_builder_add(properties, "{ss}", "roaming", BOOL2STRING(service->roaming));
+	g_variant_builder_add(properties, "{ss}", "act", __ps_service_act2string(service->act));
 	g_variant_builder_close(properties);
 
+	dbg("Exiting");
 	return TRUE;
 }
 
 GVariant * _ps_service_get_properties(gpointer object, GVariantBuilder *properties)
 {
-	PsService *service = object;
+	ps_service_t *service = object;
 
-	dbg("get service properties");
-	tcore_check_return_value(service != NULL, FALSE);
-	tcore_check_return_value(properties != NULL, FALSE);
+	dbg("get service properties ");
+	g_return_val_if_fail(service != NULL, FALSE);
+	g_return_val_if_fail(properties != NULL, FALSE);
 
 	g_variant_builder_init(properties, G_VARIANT_TYPE("a{ss}"));
 
-	g_variant_builder_add(properties, "{ss}", "path", g_strdup(service->path));
-	g_variant_builder_add(properties, "{ss}", "ps_attached", g_strdup(BOOL2STRING(service->ps_attached)));
-	g_variant_builder_add(properties, "{ss}", "roaming", g_strdup(BOOL2STRING(service->roaming)));
-	g_variant_builder_add(properties, "{ss}", "act", g_strdup(__ps_service_act2string(service->act)));
+	g_variant_builder_add(properties, "{ss}", "path", service->path);
+	g_variant_builder_add(properties, "{ss}", "ps_attached", BOOL2STRING(service->ps_attached));
+	g_variant_builder_add(properties, "{ss}", "roaming", BOOL2STRING(service->roaming));
+	g_variant_builder_add(properties, "{ss}", "act", __ps_service_act2string(service->act));
 
+	dbg("Exiting");
 	return g_variant_builder_end(properties);
 }
 
 gchar* _ps_service_ref_path(gpointer object)
 {
-	PsService *service = object;
-	tcore_check_return_value(service != NULL, NULL);
+	ps_service_t *service = object;
+	g_return_val_if_fail(service != NULL, NULL);
 
 	return service->path;
 }
 
 gpointer _ps_service_ref_plugin(gpointer object)
 {
-	PsService *service = object;
-	tcore_check_return_value(service != NULL, NULL);
+	ps_service_t *service = object;
+	g_return_val_if_fail(service != NULL, NULL);
 
 	return service->plg;
 }
 
 gpointer _ps_service_ref_co_network(gpointer object)
 {
-	PsService *service = object;
-	tcore_check_return_value(service != NULL, NULL);
+	ps_service_t *service = object;
+	g_return_val_if_fail(service != NULL, NULL);
 
 	return service->co_network;
 }
 
 gpointer _ps_service_ref_co_ps(gpointer object)
 {
-	PsService *service = object;
-	tcore_check_return_value(service != NULL, NULL);
+	ps_service_t *service = object;
+	g_return_val_if_fail(service != NULL, NULL);
 
 	return service->co_ps;
 }
 
 gpointer _ps_service_ref_modem(gpointer object)
 {
-	PsService *service = object;
-	tcore_check_return_value(service != NULL, NULL);
+	ps_service_t *service = object;
+	g_return_val_if_fail(service != NULL, NULL);
 
 	return service->p_modem;
 }
 
-gboolean _ps_service_set_context_info(gpointer object, TcorePsPdpIpConf *devinfo)
+gboolean _ps_service_set_context_info(gpointer object, struct tnoti_ps_pdp_ipconfiguration *devinfo)
 {
 	GSList* contexts = NULL;
-	PsService *service = object;
+	ps_service_t *service = object;
+	CoreObject *co_context = NULL;
 
-	dbg("Set context information");
+	dbg("set context info");
+	g_return_val_if_fail(service != NULL, FALSE);
 
-	tcore_check_return_value(service != NULL, FALSE);
-
-	/* Refer context */
-	dbg("Context ID: [%d]", devinfo->context_id);
-	tcore_ps_ref_context_by_id(service->co_ps, devinfo->context_id, &contexts);
-	if (NULL == contexts) {
-		err("Failed to refer context");
+	contexts = tcore_ps_ref_context_by_id(service->co_ps, devinfo->context_id);
+	if (!contexts) {
+		ps_dbg_ex_co(_ps_service_ref_co_network(service), "fail to ref context by cid.");
 		return FALSE;
 	}
 
-	for (; contexts != NULL; contexts = g_slist_next(contexts)) {
-		CoreObject *co_context = NULL;
-
+	while (contexts) {
 		co_context = contexts->data;
-		if (NULL == co_context) {
-			err("Context is NULL");
+		if (!co_context) {
+			contexts = contexts->next;
 			continue;
 		}
 
-		/* Set device information */
 		tcore_context_set_devinfo(co_context, devinfo);
+
+		contexts = contexts->next;
 	}
 
 	return TRUE;
 }
 
-gint _ps_service_define_context(gpointer object, gpointer context)
+int _ps_service_define_context(gpointer object, gpointer context)
 {
-	PsService *service = object;
+	ps_service_t *service = object;
 	CoreObject *co_context = NULL;
 	gboolean b_connect = TRUE;
-	TelReturn ret;
 
 	dbg("define context(%p)", context);
-	tcore_check_return_value(service != NULL, TEL_RETURN_FAILURE);
+	g_return_val_if_fail(service != NULL, FALSE);
 
 	co_context = (CoreObject *)_ps_context_ref_co_context(context);
 
 	b_connect = __ps_service_check_connection_option(service, co_context);
-	if (!b_connect) {
-		return TEL_RETURN_FAILURE;
+	if(!b_connect)
+		return TCORE_RETURN_EPERM;
 
-	}
-
-	ret = tcore_plugin_dispatch_request(tcore_object_ref_plugin(service->co_ps), TRUE,
-		TCORE_COMMAND_PS_DEFINE_CONTEXT,
-		&co_context, sizeof(CoreObject *),
-		NULL, NULL);
-
-	return ret;
+	return tcore_ps_define_context(service->co_ps, co_context, NULL);
 }
 
-gint _ps_service_activate_context(gpointer object, gpointer context)
+int _ps_service_activate_context(gpointer object, gpointer context)
 {
-	PsService *service = object;
+	ps_service_t *service = object;
+	ps_modem_t *modem = NULL;
 	CoreObject *co_context = NULL;
 	gboolean b_connect = TRUE;
 	gboolean ps_defined;
-	gint ret = TEL_RETURN_FAILURE;
+	int ret = TCORE_RETURN_FAILURE;
+	int default_data_subs = 1;
+	ps_subs_type subs_type = 1;
+	Server *s = NULL;
+	static Storage *strg;
+	CoreObject *co_network = NULL;
 
-	dbg("Activate context [0x%x]", context);
-	tcore_check_return_value(service != NULL, TEL_RETURN_INVALID_PARAMETER);
+	dbg("activate context(%p)", context);
+	g_return_val_if_fail(service != NULL, FALSE);
+
+	s = tcore_plugin_ref_server(_ps_service_ref_plugin(service));
+	strg = tcore_server_find_storage(s, "vconf");
+
+	co_network = _ps_service_ref_co_network(service);
+	modem = _ps_service_ref_modem(service);
+	if(modem->hook_flag != PS_NO_PENDING_REQUEST){
+		ps_dbg_ex_co(co_network, "Pending request present in queue with flag %x", modem->hook_flag);
+		return TCORE_RETURN_FAILURE;
+	}
+
+	/* Check for default data subscription value if matchs for modem then only activate */
+	subs_type = _ps_modem_get_subs_type(modem);
+
+	default_data_subs = tcore_storage_get_int(strg, STORAGE_KEY_TELEPHONY_DUALSIM_DEFAULT_DATA_SERVICE_INT);
+	if ((default_data_subs != -1) && ( default_data_subs != (int)subs_type)) {
+		ps_warn_ex_co(co_network, "activation  for only [SIM%d] selected by Setting", default_data_subs + 1);
+		return TCORE_RETURN_FAILURE;
+	}
 
 	co_context = (CoreObject *)_ps_context_ref_co_context(context);
 
 	b_connect = __ps_service_check_connection_option(service, co_context);
-	if (!b_connect) {
-		err("Connection option failed");
-		return TEL_RETURN_FAILURE;
-	}
+	if(!b_connect)
+		return TCORE_RETURN_EPERM;
 
 	ps_defined = _ps_context_get_ps_defined(context);
-	if (!ps_defined) {
-		dbg("PDP profile is NOT defined!!! Need to define it first... co_context: [%p]");
-		ret = tcore_plugin_dispatch_request(tcore_object_ref_plugin(service->co_ps), TRUE,
-			TCORE_COMMAND_PS_DEFINE_CONTEXT,
-			&co_context, sizeof(CoreObject *),
-			NULL, NULL);
-	} else {
-		dbg("PDP profile is defined!!! Activate context...");
-		ret = tcore_plugin_dispatch_request(tcore_object_ref_plugin(service->co_ps), TRUE,
-			TCORE_COMMAND_PS_ACTIVATE_CONTEXT,
-			&co_context, sizeof(CoreObject *),
-			NULL, NULL);
+	if(!ps_defined) {
+		ps_dbg_ex_co(co_network, "pdp profile is not defined yet, define first. ");
+		ret = tcore_ps_define_context(service->co_ps, co_context, NULL);
+	}
+	else {
+		ps_dbg_ex_co(co_network, "pdp profile is defined, activate context. ");
+		ret = tcore_ps_activate_context(service->co_ps, co_context, NULL);
 	}
 
 	return ret;
 }
 
-gint _ps_service_deactivate_context(gpointer object, gpointer context)
+gboolean _ps_service_deactivate_context(gpointer object, gpointer context)
 {
-	PsService *service = object;
+	ps_service_t *service = object;
 	CoreObject *co_context = NULL;
-	TelReturn ret = TEL_RETURN_FAILURE ;
 
+	g_return_val_if_fail(service != NULL, FALSE);
 	dbg("deactivate context(%p)", context);
-	tcore_check_return_value(service != NULL, TEL_RETURN_INVALID_PARAMETER);
-
 	co_context = (CoreObject *)_ps_context_ref_co_context(context);
-	ret = tcore_plugin_dispatch_request(tcore_object_ref_plugin(service->co_ps), TRUE,
-		TCORE_COMMAND_PS_DEACTIVATE_CONTEXT,
-		&co_context, sizeof(CoreObject *),
-		NULL, NULL);
 
-	return ret;
+	return tcore_ps_deactivate_context(service->co_ps, co_context, NULL);
 }
 
-void _ps_service_set_retry_timeout_value(int value)
+void _ps_service_set_retry_timeout_value(gpointer object, int value)
 {
-	connection_timeout = value;
-	dbg("current timeout (%d)", connection_timeout);
+	ps_service_t *service = object;
+	g_return_if_fail(service != NULL);
+
+	service->connection_timeout = value;
+	dbg("current timeout (%d)", service->connection_timeout);
+	return;
 }
 
 void _ps_service_connection_timer(gpointer object, gpointer context)
 {
+	int result = 0;
 	gboolean f_awo = FALSE;
+	ps_service_t *service = object;
+
+	g_return_if_fail(service != NULL);
 
 	f_awo = _ps_context_get_alwayson_enable(context);
-	if (!f_awo)
+	if(!f_awo)
 		return;
 
-	if (timer_src != 0) {
-		dbg("remove connection retry timer (%d)", timer_src);
-		g_source_remove(timer_src);
-		timer_src = 0;
+	if (service->timer_src > 0) {
+		warn("remove connection retry timer (%d)", service->timer_src);
+		alarmmgr_remove_alarm(service->timer_src);
+		service->timer_src = 0;
+	}
+	result = alarmmgr_add_alarm_withcb(ALARM_TYPE_VOLATILE, (time_t)(service->connection_timeout),
+			0, __ps_service_connetion_timeout_handler, context, &(service->timer_src));
+	if (result != ALARMMGR_RESULT_SUCCESS) {
+		err("Failed to add alarm(%d)", result);
+		return;
 	}
 
-	timer_src = g_timeout_add_seconds(connection_timeout, __ps_service_connetion_timeout_handler, context);
+	dbg("cellular service timer started timer src(%d), timeout(%d)", service->timer_src, service->connection_timeout);
+	service->connection_timeout = (service->connection_timeout)*2;
+	if(service->connection_timeout >= TIMEOUT_MAX)
+		service->connection_timeout = TIMEOUT_MAX;
 
-	dbg("cellular service timer started timer src(%d), timeout(%d)", timer_src, connection_timeout);
-	connection_timeout = connection_timeout*2;
-	if (connection_timeout >= TIMEOUT_MAX)
-		connection_timeout = TIMEOUT_DEFAULT;
+	return;
 }
 
 void _ps_service_reset_connection_timer(gpointer context)
 {
 	gboolean f_awo = FALSE;
+	ps_service_t *service = NULL;
 
 	f_awo = _ps_context_get_alwayson_enable(context);
-	dbg("Always ON: [%s]", (f_awo ? "YES" : "NO"));
-	if(f_awo == FALSE)
+	if(!f_awo)
 		return;
 
-	connection_timeout = TIMEOUT_DEFAULT;
-
-	if (timer_src != 0) {
-		dbg("Remove connection Retry timer [%d]", timer_src);
-
-		g_source_remove(timer_src);
-		timer_src = 0;
+	service = _ps_context_ref_service(context);
+	if(service == NULL) {
+		err("service is NULL!!!");
+		return;
 	}
+	service->connection_timeout = TIMEOUT_DEFAULT;
+
+	if (service->timer_src > 0) {
+		warn("remove connection retry timer (%d)", service->timer_src);
+		alarmmgr_remove_alarm(service->timer_src);
+		service->timer_src = 0;
+	}
+
+	return;
 }
 
 void _ps_service_remove_contexts(gpointer object)
 {
 	GHashTableIter iter;
 	gpointer key, value;
-	PsService *service = object;
+	ps_service_t *service = object;
 
 	dbg("service remove all contexts");
-	tcore_check_return(service != NULL);
+	g_return_if_fail(service != NULL);
 
 	g_hash_table_iter_init(&iter, service->contexts);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 		gpointer co_context = NULL;
 
-		dbg("key(%s), value(%p) context", key, value);
+		ps_dbg_ex_co(_ps_service_ref_co_network(service), "key(%s), value(%p) context", key, value);
 		co_context = _ps_context_ref_co_context(value);
 
 		_ps_service_reset_connection_timer(value);
 		_ps_context_set_alwayson_enable(value, FALSE);
 		_ps_service_deactivate_context(service, value);
 		_ps_context_set_connected(value, FALSE);
-		//tcore_ps_remove_context(service->co_ps, co_context);
+		tcore_ps_remove_context(service->co_ps, co_context);
 		tcore_context_free(co_context);
 
 		__ps_service_emit_context_removed_signal(service, value);
@@ -587,45 +704,86 @@ void _ps_service_remove_contexts(gpointer object)
 	}
 
 	g_hash_table_remove_all(service->contexts);
+	return;
 }
 
 void _ps_service_disconnect_contexts(gpointer object)
 {
 	GHashTableIter iter;
 	gpointer key, value;
-	PsService *service = object;
+	ps_service_t *service = object;
 
 	dbg("service disconnect all contexts");
-	tcore_check_return(service != NULL);
+	g_return_if_fail(service != NULL);
 
 	g_hash_table_iter_init(&iter, service->contexts);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 		_ps_service_reset_connection_timer(value);
 		_ps_service_deactivate_context(service, value);
 	}
+
+	return;
 }
 
-gint _ps_service_connect_default_context(gpointer object)
+void _ps_service_disconnect_internet_mms_contexts(gpointer object)
 {
-	gint rv = TEL_RETURN_FAILURE;
 	GHashTableIter iter;
 	gpointer key, value;
-	PsService *service = object;
+	ps_service_t *service = object;
+	CoreObject *co_context = NULL;
+	enum co_context_role role = CONTEXT_ROLE_UNKNOWN;
+
+	dbg("Service disconnect Internet/MMS contexts");
+	g_return_if_fail(service != NULL);
+
+	g_hash_table_iter_init(&iter, service->contexts);
+	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+		co_context = (CoreObject *)_ps_context_ref_co_context(value);
+		role = tcore_context_get_role(co_context);
+
+		/*
+		 * Deactivate following type of contexts -
+		 *	- INTERNET
+		 *	- INTERNET_PREPAID
+		 *	- MMS
+		 *	- MMS_PREPAID
+		 */
+		switch (role) {
+		case CONTEXT_ROLE_INTERNET:
+		case CONTEXT_ROLE_MMS:
+		case CONTEXT_ROLE_PREPAID_INTERNET:
+		case CONTEXT_ROLE_PREPAID_MMS:
+			_ps_service_reset_connection_timer(value);
+			_ps_service_deactivate_context(service, value);
+		break;
+
+		default: {
+			dbg("Need not deactivate for %d PDN type", role);
+			continue;
+		}
+		}
+	}
+}
+
+int _ps_service_connect_default_context(gpointer object)
+{
+	int rv = 0;
+	GHashTableIter iter;
+	gpointer key, value;
+	ps_service_t *service = object;
 
 	dbg("service connect default context");
-	tcore_check_return_value(service != NULL, TEL_RETURN_INVALID_PARAMETER);
+	g_return_val_if_fail(service != NULL, TCORE_RETURN_FAILURE);
 
 	g_hash_table_iter_init(&iter, service->contexts);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 		gboolean f_awo = FALSE;
 		f_awo = _ps_context_get_alwayson_enable(value);
 
-		if (f_awo) {
+		if(f_awo){
 			_ps_service_reset_connection_timer(value);
-
-			/* Activate Context */
 			rv = _ps_service_activate_context(service, value);
-			dbg("return rv(%d)", rv);
+			ps_dbg_ex_co(_ps_service_ref_co_network(service), "return rv(%d)", rv);
 			break;
 		}
 	}
@@ -633,20 +791,20 @@ gint _ps_service_connect_default_context(gpointer object)
 	return rv;
 }
 
-gpointer _ps_service_return_default_context(gpointer object)
+gpointer _ps_service_return_default_context(gpointer object, int svc_cat_id)
 {
 	GHashTableIter iter;
 	gpointer key, value;
-	PsService *service = object;
+	ps_service_t *service = object;
 
-	tcore_check_return_value(service != NULL, NULL);
+	g_return_val_if_fail(service != NULL, NULL);
 
 	g_hash_table_iter_init(&iter, service->contexts);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 		gboolean b_default = FALSE;
-		b_default = _ps_context_get_default_internet(value);
+		b_default = _ps_context_get_default_context(value, svc_cat_id);
 
-		if (b_default) {
+		if(b_default){
 			return value;
 		}
 	}
@@ -654,56 +812,172 @@ gpointer _ps_service_return_default_context(gpointer object)
 	return NULL;
 }
 
-gboolean _ps_service_processing_network_event(gpointer object,
-	gboolean ps_attached, gboolean roaming)
+int _ps_service_update_roaming_apn(gpointer object, const char* apn_str)
 {
-	PsService *service = object;
-	tcore_check_return_value(service != NULL, FALSE);
+	int rv = 0;
+	GHashTableIter iter;
+	gpointer key, value;
+	ps_service_t *service = object;
 
+	g_return_val_if_fail(service != NULL, TCORE_RETURN_FAILURE);
+
+	g_hash_table_iter_init(&iter, service->contexts);
+	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+		CoreObject *co_context = NULL;
+		int role = CONTEXT_ROLE_UNKNOWN;
+		char *tmp_apn = NULL, *path = NULL;
+
+		co_context = (CoreObject *)_ps_context_ref_co_context(value);
+		role = tcore_context_get_role(co_context);
+		tmp_apn = tcore_context_get_apn(co_context);
+		path = _ps_context_ref_path(value);
+
+		if(role == CONTEXT_ROLE_INTERNET || role == CONTEXT_ROLE_MMS) {
+			dbg("context[%s]}, role[%d], apn[%s] -> apn[%s]", path, role, tmp_apn, apn_str);
+			tcore_context_set_apn(co_context, apn_str);
+			tcore_ps_deactivate_context(service->co_ps, co_context, NULL);
+		}
+		g_free(tmp_apn);
+	}
+	dbg("rv: %d", rv);
+	return rv;
+}
+
+gboolean _ps_service_processing_network_event(gpointer object, gboolean ps_attached, gboolean roaming)
+{
+	ps_service_t *service = object;
+	CoreObject *co_network = NULL;
+	gboolean prev_roaming_status;
+	g_return_val_if_fail(service != NULL, FALSE);
+
+
+	prev_roaming_status = _ps_service_get_roaming(service);
+
+	co_network = _ps_service_ref_co_network(service);
 	_ps_service_set_ps_attached(service, ps_attached);
+	_ps_service_set_roaming(service, roaming);
 	_ps_update_cellular_state_key(service);
+	/* Need to set 'Attach APN' for 'ESM Attach' if ps_status is available */
+	if (ps_attached)
+		__ps_service_set_attach_apn(service);
 
-	if (service->roaming != roaming) {
+	if(prev_roaming_status != _ps_service_get_roaming(service)) {
 		gboolean roaming_allowed = FALSE;
-		_ps_service_set_roaming(service, roaming);
 		roaming_allowed = _ps_modem_get_data_roaming_allowed(service->p_modem);
-		if (!roaming_allowed && roaming) {
-			dbg("Roaming allowed (%d), Roaming status (%d)", roaming_allowed, roaming);
+		if(!roaming_allowed && roaming) {
+			ps_dbg_ex_co(co_network, "Roaming allowed (%d), Roaming status (%d)", roaming_allowed, roaming);
 			_ps_service_disconnect_contexts(service);
 			return TRUE;
 		}
 	}
 
-	if (service->ps_attached)
+	if(service->ps_attached)
 		_ps_service_connect_default_context(service);
 
 	return TRUE;
 }
 
-gboolean _ps_service_set_connected(gpointer object, gint context_id, gboolean enabled)
+gboolean _ps_service_set_connected(gpointer object, gpointer cstatus, gboolean enabled)
 {
 	GHashTableIter iter;
 	gpointer key, value;
 
-	PsService *service = NULL;
+	gboolean def_awo = FALSE, b_def_conn = FALSE;
+	gpointer def_conn = NULL;
+	gpointer requested_conn = NULL;
 
-	service = (PsService *) object;
+	ps_service_t *service = NULL;
+	struct tnoti_ps_call_status *call_status = NULL;
+	CoreObject * co_network;
+//	gpointer pre_def_conn = NULL;
+
+	service = (ps_service_t *) object;
+	co_network = _ps_service_ref_co_network(service);
+	call_status = (struct tnoti_ps_call_status *)cstatus;
+
+	if(enabled && service->initial_pdp_conn == FALSE) {
+		ps_dbg_ex_co(co_network, "Initial PDP connection.");
+		service->initial_pdp_conn = TRUE;
+	}
+
 	g_hash_table_iter_init(&iter, service->contexts);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
-		guint tmp_cid;
+		int tmp_cid;
+		gboolean b_tmp_def = FALSE;
 		CoreObject *context = NULL;
+		gpointer b_user_data = NULL;
 
 		context = _ps_context_ref_co_context(value);
-		tcore_context_get_id(context, &tmp_cid);
+		tmp_cid = tcore_context_get_id(context);
 
-		if (tmp_cid != (guint)context_id) continue;
+		if (tmp_cid != call_status->context_id) continue;
 
-		if (!enabled) {
-			dbg("Reset socket connections.");
+		//if there is default context in disconnected cid, it has to retry auto connection
+		b_tmp_def = _ps_context_get_default_context(value, CONTEXT_ROLE_INTERNET);
+		if(!b_def_conn){
+			b_def_conn = b_tmp_def;
+		}
+
+		//if disconnected connection has the user data, it is a priority connection.
+		b_user_data = _ps_context_get_user_data(value);
+		if(b_user_data){
+			def_conn = value;
+			requested_conn = b_user_data;
+		}
+
+		if(!enabled){
+			gchar *ipv4 = NULL;
+
+			ps_dbg_ex_co(co_network, "Reset socket connections.");
+
 			tcore_ps_clear_context_id(service->co_ps, context);
+			ipv4 = tcore_context_get_ipv4_addr(context);
+			tcore_util_reset_ipv4_socket(tcore_context_get_ipv4_devname(context), (const char*)ipv4);
 		}
 
 		_ps_context_set_connected(value, enabled);
+	}
+
+	//connect to request profile
+	if(!enabled && requested_conn){
+		ps_dbg_ex_co(co_network, "connect to request profile (%p)", requested_conn);
+		_ps_connection_hdlr(requested_conn);
+		_ps_service_reset_connection_timer(def_conn);
+		_ps_context_reset_user_data(def_conn);
+		return TRUE;
+	}
+
+	//default context and always on is true. - request to connect
+	if(!enabled){
+		def_conn = _ps_service_return_default_context(service, CONTEXT_ROLE_INTERNET);
+		def_awo = _ps_context_get_alwayson_enable(def_conn);
+
+		if(!def_awo){
+			ps_dbg_ex_co(co_network, "there is no always on connection");
+			return TRUE;
+		}
+
+		//always on TRUE and default connection - NORMAL RETRY
+		//always on TRUE and no default connection - WAIT 5 Secs for retry from application
+		if(b_def_conn){
+			//retry connection
+			_ps_service_connection_timer(service, def_conn);
+		}
+		else{
+
+			//disconnect from user intention
+#if defined(CONNECT_DEFAULT_CONNECTION_WITHOUT_TIMER)
+			if(call_status->result == 2000) {
+				ps_dbg_ex_co(co_network, "user intended disconnect / connect default connection without timer");
+				__ps_service_connetion_timeout_handler(service->timer_src, def_conn);
+				return TRUE;
+			}
+#endif
+			//with unexpected disconnection from network/me
+			_ps_service_set_retry_timeout_value(service, TIMEOUT_DEFAULT);
+			_ps_service_connection_timer(service, def_conn);
+		}
+
 	}
 
 	return TRUE;
@@ -711,92 +985,112 @@ gboolean _ps_service_set_connected(gpointer object, gint context_id, gboolean en
 
 void _ps_service_set_ps_defined(gpointer *object, gboolean value, int cid)
 {
-	PsService *service = (PsService*)object;
+	ps_service_t *service = (ps_service_t*)object;
 	GHashTableIter iter;
-	gpointer key, out;
+	gpointer key, ps_context;
+	CoreObject *co_network;
+	CoreObject *co_context;
+	unsigned char context_id;
 
-	tcore_check_return(service != NULL);
+	g_return_if_fail(service != NULL);
 
+	co_network = _ps_service_ref_co_network(service);
 	g_hash_table_iter_init(&iter, service->contexts);
-	while (g_hash_table_iter_next(&iter, &key, &out) == TRUE) {
-		gboolean r_actvate = 0;
-		r_actvate = _ps_context_set_ps_defined(out, value, cid);
-		r_actvate &= value;
-		if (r_actvate) {
-			int rv;
-			dbg("define is complete, activate context for cid(%d)", cid);
-			rv = _ps_service_activate_context(service, out);
-			dbg("rv(%d)", rv);
+	while (g_hash_table_iter_next(&iter, &key, &ps_context) == TRUE) {
+		co_context = _ps_context_ref_co_context(ps_context);
+		context_id = tcore_context_get_id(co_context);
+		if (context_id == cid) {
+			gboolean b_only_attach;
+			/* Set 'ps_defined' */
+			_ps_context_set_ps_defined(ps_context, value);
+
+			b_only_attach = _ps_context_get_only_attach(ps_context);
+			if (b_only_attach) {
+				dbg("Do not activate for only attach apn");
+				_ps_context_set_only_attach(ps_context, FALSE);
+				break;
+			}
+
+			/* Activate if define is completed */
+			if (value) {
+				ps_dbg_ex_co(co_network, "define is complete, activate context for cid(%d)", cid);
+				if (_ps_service_activate_context(service, ps_context)
+						== TCORE_RETURN_SUCCESS) {
+					dbg("Successful activate context");
+					tcore_ps_set_cid_active(service->co_ps, cid, TRUE);
+				}
+			}
 			break;
 		}
 	}
+
+	return;
 }
 
 gboolean _ps_service_set_ps_attached(gpointer object, gboolean value)
 {
-	PsService *service = object;
-	tcore_check_return_value(service != NULL, FALSE);
+	ps_service_t *service = object;
+	g_return_val_if_fail(service != NULL, FALSE);
 
 	service->ps_attached = value;
-	dbg("service(%p) ps_attached(%d)", service, service->ps_attached);
+	ps_dbg_ex_co(_ps_service_ref_co_network(service), "service(%p) ps_attached(%d)", service, service->ps_attached);
+	__ps_service_emit_property_changed_signal(service);
 
 	return TRUE;
 }
 
 gboolean _ps_service_get_restricted(gpointer object)
 {
-	PsService *service = object;
-	tcore_check_return_value(service != NULL, FALSE);
+	ps_service_t *service = object;
+	g_return_val_if_fail(service != NULL, FALSE);
 
 	return service->restricted;
 }
 
 gboolean _ps_service_set_restricted(gpointer object, gboolean value)
 {
-	PsService *service = object;
-	tcore_check_return_value(service != NULL, FALSE);
+	ps_service_t *service = object;
+	g_return_val_if_fail(service != NULL, FALSE);
 
 	service->restricted = value;
-	dbg("service(%p) restricted(%d)", service, service->restricted);
+	ps_dbg_ex_co(_ps_service_ref_co_network(service), "service(%p) restricted(%d)", service, service->restricted);
 
 	_ps_update_cellular_state_key(service);
 	return TRUE;
 }
 
-#if 0
 gboolean _ps_service_set_number_of_pdn_cnt(gpointer object, gchar *operator)
 {
 	int rv = 0;
 	int num_of_pdn = 0;
-	PsService *service = object;
-	tcore_check_return_value(service != NULL, FALSE);
-	dbg("Entered");
-	num_of_pdn = _ps_context_get_number_of_pdn(operator);
+	ps_service_t *service = object;
+	g_return_val_if_fail(service != NULL, FALSE);
+	ps_dbg_ex_co(_ps_service_ref_co_network(service), "Entered");
+	num_of_pdn = _ps_context_get_number_of_pdn(operator, _ps_modem_ref_cp_name(_ps_service_ref_modem(object)));
 	rv = tcore_ps_set_num_of_pdn(service->co_ps, num_of_pdn);
 
-	if (rv != TEL_RETURN_SUCCESS) {
-		dbg("error to get maximum number of pdn");
+	if(rv != TCORE_RETURN_SUCCESS){
+		ps_dbg_ex_co(_ps_service_ref_co_network(service), "error to get maximum number of pdn");
 	}
 	dbg("Exiting");
 	return TRUE;
 }
-#endif
 
 gboolean _ps_service_get_roaming(gpointer object)
 {
-	PsService *service = object;
-	tcore_check_return_value(service != NULL, FALSE);
+	ps_service_t *service = object;
+	g_return_val_if_fail(service != NULL, FALSE);
 
 	return service->roaming;
 }
 
 gboolean _ps_service_set_roaming(gpointer object, gboolean value)
 {
-	PsService *service = object;
-	tcore_check_return_value(service != NULL, FALSE);
+	ps_service_t *service = object;
+	g_return_val_if_fail(service != NULL, FALSE);
 
 	service->roaming = value;
-	dbg("service(%p) roaming(%d)", service, service->roaming);
+	ps_dbg_ex_co(_ps_service_ref_co_network(service), "service(%p) roaming(%d)", service, service->roaming);
 	__ps_service_emit_property_changed_signal(service);
 
 	return TRUE;
@@ -833,31 +1127,32 @@ static void _indicator_cb_dns_reply(GObject *src, GAsyncResult *res, gpointer us
 
 	g_object_unref(src);
 	g_list_free(list);
+	return;
 }
 
 gboolean _ps_service_set_access_technology(gpointer object,
-		TelNetworkAct value)
+		enum telephony_network_access_technology value)
 {
-	PsService *service = object;
-	TelNetworkAct p_act = 0;
-	tcore_check_return_value(service != NULL, FALSE);
+	ps_service_t *service = object;
+	CoreObject *co_network = NULL;
+	enum telephony_network_access_technology p_act = 0;
+	g_return_val_if_fail(service != NULL, FALSE);
 
+	co_network = _ps_service_ref_co_network(service);
 	p_act = service->act;
 	service->act = value;
-	dbg("service(%p) P ACT(%d) Access Technology(%d)", service, p_act, service->act);
+	ps_dbg_ex_co(co_network, "service(%p) P ACT(%d) Access Technology(%d)", service, p_act, service->act);
 
-	if (p_act == TEL_NETWORK_ACT_LTE
-			&& (service->act >= TEL_NETWORK_ACT_GSM
-			&& service->act < TEL_NETWORK_ACT_LTE)) {
+	if(p_act == NETWORK_ACT_LTE && (service->act >= NETWORK_ACT_GSM && service->act < NETWORK_ACT_LTE) ){
 		GResolver *r = NULL;
 
-		dbg("send the dns pkt for keeping connection");
+		ps_dbg_ex_co(co_network, "send the dns pkt for keeping connection");
 
 		r = g_resolver_get_default();
 		g_resolver_lookup_by_name_async(r, "www.google.com", NULL, _indicator_cb_dns_reply, NULL);
 	}
 
-	if (service->act > TEL_NETWORK_ACT_UNKNOWN) {
+	if(service->act > NETWORK_ACT_UNKNOWN && service->act < NETWORK_ACT_NOT_SPECIFIED){
 		_ps_update_cellular_state_key(service);
 		_ps_service_connect_default_context(service);
 	}
@@ -865,76 +1160,77 @@ gboolean _ps_service_set_access_technology(gpointer object,
 	return TRUE;
 }
 
-TcorePsState _ps_service_check_cellular_state(gpointer object)
+enum telephony_ps_state _ps_service_check_cellular_state(gpointer object)
 {
 	gboolean state = FALSE;
-	PsService *service = object;
-	tcore_check_return_value(service != NULL, TCORE_PS_STATE_NO_SERVICE);
+	ps_service_t *service = object;
+	g_return_val_if_fail(service != NULL, TELEPHONY_PS_NO_SERVICE);
+
+	state = _ps_modem_get_flght_mode(service->p_modem);
+	if(state){
+		return TELEPHONY_PS_FLIGHT_MODE;
+	}
 
 	state = _ps_modem_get_power(service->p_modem);
-	if (!state) {
-		dbg("NO SERVICE");
-		return TCORE_PS_STATE_NO_SERVICE;
+	if(!state){
+		return TELEPHONY_PS_NO_SERVICE;
 	}
 
 	state = _ps_modem_get_sim_init(service->p_modem);
-	if (!state) {
-		dbg("NO SERVICE");
-		return TCORE_PS_STATE_NO_SERVICE;
+	if(!state){
+		return TELEPHONY_PS_NO_SERVICE;
 	}
 
-	state = _ps_modem_get_flght_mode(service->p_modem);
-	if (state) {
-		dbg("FLIGHT MODE ON");
-		return TCORE_PS_STATE_FLIGHT_MODE;
+	if(service->restricted){
+		return TELEPHONY_PS_RESTRICTED_SERVICE;
 	}
 
-	if (!service->ps_attached) {
-		dbg("NO SERVICE");
-		return TCORE_PS_STATE_NO_SERVICE;
+	if(!service->ps_attached){
+		return TELEPHONY_PS_NO_SERVICE;
 	}
 
 	state = _ps_modem_get_data_allowed(service->p_modem);
-	if (!state) {
-		dbg("DATA OFF");
-		return TCORE_PS_STATE_3G_OFF;
+	if(!state){
+		return TELEPHONY_PS_3G_OFF;
 	}
 
 	state = _ps_modem_get_data_roaming_allowed(service->p_modem);
-
-	if (service->roaming && !state) {
-		dbg("DATA ROAMING OFF");
-		return TCORE_PS_STATE_ROAMING_OFF;
+	if(service->roaming && !state){
+		return TELEPHONY_PS_ROAMING_OFF;
 	}
 
-	return TCORE_PS_STATE_ON;
+	return TELEPHONY_PS_ON;
 }
 static gboolean on_service_get_properties (PacketServiceService *obj_service,
-	GDBusMethodInvocation *invocation, gpointer user_data)
+		GDBusMethodInvocation *invocation,
+		gpointer user_data)
 {
 	GVariant *gv = NULL;
 	GVariantBuilder property;
-	dbg("get service properties");
+	ps_dbg_ex_co(_ps_service_ref_co_network(user_data), "get service properties");
 
 	gv = _ps_service_get_properties(user_data, &property);
 	packet_service_service_complete_get_properties(obj_service, invocation, gv);
 	return TRUE;
 }
 
-static gboolean on_service_get_context (PacketServiceService *obj_service,
-	GDBusMethodInvocation *invocation, gpointer user_data)
+static gboolean
+on_service_get_context (PacketServiceService *obj_service,
+		GDBusMethodInvocation *invocation,
+		gpointer user_data)
 {
 	GVariantBuilder b_context;
 	GVariant *contexts;
 
 	GHashTableIter iter;
 	gpointer key, value;
-	PsService *service = user_data;
+	ps_service_t *service = user_data;
+	CoreObject *co_network = _ps_service_ref_co_network(service);
 
-	dbg("modem get contexts interface");
+	ps_dbg_ex_co(co_network, "modem get contexts interface");
 
 	if (service->contexts == NULL) {
-		err("No context present for service");
+		ps_err_ex_co(co_network, "No context present for service");
 		FAIL_RESPONSE(invocation,PS_ERR_INTERNAL);
 		return TRUE;
 	}
@@ -947,8 +1243,8 @@ static gboolean on_service_get_context (PacketServiceService *obj_service,
 		path = _ps_service_ref_path(value);
 
 		g_variant_builder_add(&b_context, "s",g_strdup(path));
-		if (FALSE == _ps_context_get_properties_handler(value, &b_context)) {
-			err("Failed to get property");
+		if(FALSE == _ps_context_get_properties_handler(value, &b_context)){
+			ps_err_ex_co(co_network, "Failed to get property");
 			g_variant_builder_close(&b_context);
 			FAIL_RESPONSE(invocation,PS_ERR_INTERNAL);
 			return TRUE;
@@ -962,19 +1258,20 @@ static gboolean on_service_get_context (PacketServiceService *obj_service,
 	return TRUE;
 }
 
-static void _ps_service_setup_interface(PacketServiceService *service,
-	PsService *service_data)
+static void _ps_service_setup_interface(PacketServiceService *service, ps_service_t *service_data)
 {
 	dbg("Entered");
 	g_signal_connect (service,
-		"handle-get-properties",
-		G_CALLBACK (on_service_get_properties),
-		service_data);
+			"handle-get-properties",
+			G_CALLBACK (on_service_get_properties),
+			service_data);
 
 	g_signal_connect (service,
-		"handle-get-contexts",
-		G_CALLBACK (on_service_get_context),
-		service_data);
+			"handle-get-contexts",
+			G_CALLBACK (on_service_get_context),
+			service_data);
 
 	dbg("Exiting");
+	return;
 }
+

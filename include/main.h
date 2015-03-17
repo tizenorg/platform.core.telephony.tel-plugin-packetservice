@@ -1,7 +1,10 @@
 /*
- * tel-plugin-packetservice
+ * PacketService Control Module
  *
- * Copyright (c) 2013 Samsung Electronics Co. Ltd. All rights reserved.
+ * Copyright (c) 2012 Samsung Electronics Co., Ltd. All rights reserved.
+ *
+ * Contact: DongHoo Park <donghoo.park@samsung.com>
+ *			Arun Shukla <arun.shukla@samsung.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +17,12 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
 #include <glib.h>
+#include <tcore.h>
 
-#include "ps-error.h"
+gboolean ps_main_init(TcorePlugin *plugin);
 
-GQuark ps_error_quark(void)
-{
-	static GQuark quark = 0;
-
-	if (!quark) quark = g_quark_from_static_string("ps_error");
-
-	return quark;
-}
+void ps_main_exit(TcorePlugin *plugin);
