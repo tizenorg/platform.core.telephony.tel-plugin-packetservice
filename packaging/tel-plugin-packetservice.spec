@@ -33,7 +33,9 @@ Telephony Packet Service library
 %setup -q
 
 %build
-%cmake . -DSYSCONFDIR=%{_sysconfdir}
+%cmake . -DSYSCONFDIR=%{_sysconfdir} \
+	-DCMAKE_INSTALL_PREFIX=%{_prefix} \
+	-DLIB_INSTALL_DIR=%{_libdir}
 make %{?jobs:-j%jobs}
 
 %post
