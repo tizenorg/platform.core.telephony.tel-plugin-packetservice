@@ -37,6 +37,8 @@
 #include <core_object.h>
 #include <hal.h>
 
+#include <cynara-client.h>
+
 #include "generated-code.h"
 #include "ps_log.h"
 
@@ -252,7 +254,7 @@ typedef struct ps_custom_data{
 	guint bus_id;
 	TcorePlugin *p;
 	GSList *master;
-}ps_custom_t;
+} ps_custom_t;
 
 /*MASTER*/
 void 		__remove_master(gpointer master, gpointer user_data);
@@ -412,7 +414,7 @@ void __ps_check_handle_modem_off_request(gpointer data, __ps_call_flow_type type
 enum tcore_hook_return __on_hook_modem_added(Server *s, CoreObject *source, enum tcore_notification_command command, unsigned int data_len, void *data, void *user_data);
 
 /* util.c */
-gboolean ps_util_check_access_control (GDBusMethodInvocation *invoc, const char *label, const char *perm);
+gboolean ps_util_check_access_control (cynara *p_cynara, GDBusMethodInvocation *invoc, const char *label, const char *perm);
 GSource * ps_util_gsource_dispatch(GMainContext *main_context, gint priority, GSourceFunc cb, gpointer data);
 gboolean ps_util_thread_dispatch(GMainContext *main_context, gint priority, GSourceFunc cb, gpointer data);
 int  ps_util_system_command(char * command);
