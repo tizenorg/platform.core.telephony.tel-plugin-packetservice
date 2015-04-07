@@ -43,6 +43,12 @@ static void _packet_service_cleanup()
 	/* Free GDBusConnection */
 	g_object_unref(ps_ctx->conn);
 
+	/* Free cynara handle */
+	if (ps_ctx->p_cynara) {
+		cynara_finish(ps_ctx->p_cynara);
+		ps_ctx->p_cynara = NULL;
+	}
+
 	/*Freeing the memory allocated to the custom data for Packet Service*/
 	g_free(ps_ctx);
 	ps_ctx =  NULL;
@@ -125,6 +131,14 @@ gboolean ps_main_init(TcorePlugin *p)
 			p, NULL);
 
 	dbg("id=[%d]", id);
+
+	/* Initialize cynara handle */
+	if (CYNARA_API_SUCCESS == cynara_initialize(&(ps_ctx->p_cynara), ps_ctx->conf)) {
+		// initialization is successful
+		dbg("cynara is successfully initialized.");
+	} else {
+		err("Failed to initialize cynara handle !");
+	}
 
 
 	/*Initializing the custom data for PacketService*/

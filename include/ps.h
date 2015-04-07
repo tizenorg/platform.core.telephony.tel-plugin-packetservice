@@ -37,6 +37,10 @@
 #include <core_object.h>
 #include <hal.h>
 
+#include <cynara-client.h>
+#include <cynara-session.h>
+#include <cynara-creds-dbus.h>
+
 #include "generated-code.h"
 #include "ps_log.h"
 
@@ -252,7 +256,10 @@ typedef struct ps_custom_data{
 	guint bus_id;
 	TcorePlugin *p;
 	GSList *master;
-}ps_custom_t;
+
+	cynara *p_cynara;
+	cynara_configuration *conf;
+} ps_custom_t;
 
 /*MASTER*/
 void 		__remove_master(gpointer master, gpointer user_data);

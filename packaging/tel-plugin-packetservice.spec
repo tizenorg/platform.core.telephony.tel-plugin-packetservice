@@ -22,7 +22,9 @@ BuildRequires:  pkgconfig(tcore)
 BuildRequires:  pkgconfig(db-util)
 BuildRequires:  pkgconfig(vconf)
 BuildRequires: 	pkgconfig(alarm-service)
-BuildRequires:  pkgconfig(security-server)
+BuildRequires:  pkgconfig(cynara-client)
+BuildRequires:  pkgconfig(cynara-creds-dbus)
+BuildRequires:  pkgconfig(dbus-1)
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 
