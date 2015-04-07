@@ -22,7 +22,6 @@
 
 #include <unistd.h>
 #include <wait.h>
-#include <security-server.h>
 
 #include <libxml/xmlmemory.h>
 #include <libxml/parser.h>
@@ -40,10 +39,55 @@ gboolean ps_util_check_access_control (GDBusMethodInvocation *invoc, const char 
 	unsigned int pid;
 	int ret;
 	int result = FALSE;
+	/* For cynara */
+	const gchar *unique_name = NULL;
+	char *client_smack = NULL;
+	char *client_session = NULL;
+	char *uid = NULL;
+	const char *privilege = NULL;
+	ps_custom_t *ctx = NULL;
+	gchar *address = NULL;
+	DBusConnection *d_conn = NULL;
+	DBusError d_error;
 
 	conn = g_dbus_method_invocation_get_connection (invoc);
 	if (!conn) {
 		warn ("access control denied (no connection info)");
+		goto OUT;
+	}
+
+	address = g_dbus_address_get_for_bus_sync(G_BUS_TYPE_SYSTEM, NULL, NULL);
+	if (!address) {
+		warn ("access control denied (fail to get dbus address");
+		goto OUT;
+	}
+	d_conn = dbus_connection_open(address, &d_error);
+	if (d_conn == NULL) {
+		warn ("access control denied (fail to get pure dbus connection");
+		goto OUT;
+	}
+
+	ctx = g_dbus_method_invocation_get_user_data(invoc);
+	if (!ctx) {
+		warn ("access control denied (fail to get custom data)");
+		goto OUT;
+	}
+
+	unique_name = g_dbus_connection_get_unique_name(conn);
+	if (!unique_name) {
+		warn ("access control denied (fail to get unique name)");
+		goto OUT;
+	}
+
+	ret = cynara_creds_dbus_get_client(d_conn, unique_name, CLIENT_METHOD_SMACK, &client_smack);
+	if (ret != CYNARA_API_SUCCESS) {
+		warn ("access control denied (fail to get cynara client)");
+		goto OUT;
+	}
+
+	ret = cynara_creds_dbus_get_user(d_conn, unique_name, CLIENT_METHOD_SMACK, &uid);
+	if (ret != CYNARA_API_SUCCESS) {
+		warn ("access control denied (fail to get cynara uid)");
 		goto OUT;
 	}
 
@@ -78,8 +122,20 @@ gboolean ps_util_check_access_control (GDBusMethodInvocation *invoc, const char 
 
 	dbg ("sender: %s pid = %u", sender, pid);
 
-	ret = security_server_check_privilege_by_pid (pid, label, perm);
-	if (ret != SECURITY_SERVER_API_SUCCESS) {
+	client_session = cynara_session_from_pid(pid);
+	if (!client_session) {
+		warn ("access control denied (fail to get cynara client session)");
+		goto OUT;
+	}
+
+	if (g_strrstr(perm, "w") == NULL && g_strrstr(perm, "x") == NULL) {
+		privilege = "http://tizen.org/privilege/telephony";
+	} else {
+		privilege = "http://tizen.org/privilege/telephony.admin";
+	}
+
+	ret = cynara_check(ctx->p_cynara, client_smack, client_session, uid, privilege);
+	if (ret != CYNARA_API_ACCESS_ALLOWED) {
 		warn ("pid(%u) access (%s - %s) denied(%d)", pid, label, perm, ret);
 	}
 	else
@@ -92,6 +148,13 @@ OUT:
 				G_DBUS_ERROR_ACCESS_DENIED,
 				"No access rights");
 	}
+	if (d_conn) {
+		dbus_connection_unref(d_conn);
+		d_conn = NULL;
+	}
+	g_free(client_session);
+	g_free(client_smack);
+	g_free(uid);
 	return result;
 }
 
