@@ -86,9 +86,19 @@ gboolean ps_main_init(TcorePlugin *p)
 	gchar *address = NULL;
 	GError *error = NULL;
 	GDBusConnection *conn = NULL;
+	cynara *p_cynara = NULL;
 
 	if (!p)
 		return FALSE;
+
+	/* Initialize cynara handle */
+	if (CYNARA_API_SUCCESS == cynara_initialize(&p_cynara, NULL)) {
+		dbg("cynara handle is successfully initialized.");
+	} else {
+		err("Failed to initialize cynara handle.");
+		return FALSE;
+	}
+	tcore_plugin_link_user_data(p, p_cynara);
 
 	rv = _ps_context_initialize(p);
 	if(rv != TRUE){
@@ -126,7 +136,6 @@ gboolean ps_main_init(TcorePlugin *p)
 
 	dbg("id=[%d]", id);
 
-
 	/*Initializing the custom data for PacketService*/
 	ps_ctx->bus_id = id;
 	ps_ctx->master = NULL;
@@ -136,5 +145,13 @@ gboolean ps_main_init(TcorePlugin *p)
 
 void ps_main_exit(TcorePlugin *p)
 {
+	cynara *p_cynara = tcore_plugin_ref_user_data(p);
+
+	/* Free cynara handle */
+	if (p_cynara) {
+		cynara_finish(p_cynara);
+		tcore_plugin_link_user_data(p, NULL);
+	}
+
 	_packet_service_cleanup();
 }

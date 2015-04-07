@@ -2433,8 +2433,11 @@ static gboolean on_context_get_properties (PacketServiceContext *obj_context,
 {
 	GVariant *gv = NULL;
 	GVariantBuilder property;
+	ps_context_t *pscontext = user_data;
+	TcorePlugin *p = (pscontext)?pscontext->plg:NULL;
+	cynara *p_cynara = tcore_plugin_ref_user_data(p);
 
-	if (!ps_util_check_access_control (invocation, AC_PS_PUBLIC, "r"))
+	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PUBLIC, "r"))
 		return TRUE;
 
 	dbg("Entered");
@@ -2449,8 +2452,11 @@ static gboolean on_context_get_profile (PacketServiceContext *obj_context,
 {
 	GVariant *gv = NULL;
 	GVariantBuilder profile;
+	ps_context_t *pscontext = user_data;
+	TcorePlugin *p = (pscontext)?pscontext->plg:NULL;
+	cynara *p_cynara = tcore_plugin_ref_user_data(p);
 
-	if (!ps_util_check_access_control (invocation, AC_PS_PUBLIC, "r"))
+	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PUBLIC, "r"))
 		return TRUE;
 
 	dbg("Entered");
@@ -2476,8 +2482,10 @@ static gboolean on_context_handle_activate (PacketServiceContext *obj_context,
 	CoreObject *co_network;
 
 	ps_context_t *pscontext = user_data;
+	TcorePlugin *p = (pscontext)?pscontext->plg:NULL;
+	cynara *p_cynara = tcore_plugin_ref_user_data(p);
 
-	if (!ps_util_check_access_control (invocation, AC_PS_PRIVATE, "w"))
+	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PRIVATE, "w"))
 		return TRUE;
 
 	dbg("Entered");
@@ -2593,8 +2601,10 @@ static gboolean on_context_handle_deactiavte (PacketServiceContext *obj_context,
 	CoreObject *co_network;
 	int context_state = 0;
 	ps_context_t *pscontext = user_data;
+	TcorePlugin *p = (pscontext)?pscontext->plg:NULL;
+	cynara *p_cynara = tcore_plugin_ref_user_data(p);
 
-	if (!ps_util_check_access_control (invocation, AC_PS_PRIVATE, "w"))
+	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PRIVATE, "w"))
 		return TRUE;
 
 	dbg("Entered");
@@ -2648,9 +2658,11 @@ static gboolean on_context_set_default_connection (PacketServiceContext *obj_con
 	gpointer service = NULL;
 	gpointer cur_default_ctx = NULL;
 	ps_context_t *pscontext = user_data;
+	TcorePlugin *p = (pscontext)?pscontext->plg:NULL;
+	cynara *p_cynara = tcore_plugin_ref_user_data(p);
 	CoreObject *co_network;
 
-	if (!ps_util_check_access_control (invocation, AC_PS_PROFILE, "w"))
+	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PROFILE, "w"))
 		return TRUE;
 
 	dbg("enter set default connection ps_context_t(%p)", pscontext);
@@ -2738,10 +2750,12 @@ static gboolean on_context_modify_profile (PacketServiceContext *obj_context,
 	gboolean rv = FALSE;
 	int context_state = 0;
 	ps_context_t *context = user_data;
+	TcorePlugin *p = (context)?context->plg:NULL;
+	cynara *p_cynara = tcore_plugin_ref_user_data(p);
 	CoreObject *co_network = _ps_service_ref_co_network(_ps_context_ref_service(context));
 	GHashTable *profile_property = NULL;
 
-	if (!ps_util_check_access_control (invocation, AC_PS_PROFILE, "w"))
+	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PROFILE, "w"))
 		return TRUE;
 
 	ps_dbg_ex_co(co_network, "modify context's profile properties");
@@ -2788,9 +2802,11 @@ static gboolean on_context_remove_profile (PacketServiceContext *obj_context,
 		gpointer user_data)
 {
 	ps_context_t *context = user_data;
+	TcorePlugin *p = (context)?context->plg:NULL;
+	cynara *p_cynara = tcore_plugin_ref_user_data(p);
 	CoreObject *co_network = _ps_service_ref_co_network(_ps_context_ref_service(context));
 
-	if (!ps_util_check_access_control (invocation, AC_PS_PROFILE, "w"))
+	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PROFILE, "w"))
 		return TRUE;
 
 	dbg("Entered");
@@ -2799,7 +2815,7 @@ static gboolean on_context_remove_profile (PacketServiceContext *obj_context,
 
 	if(CONTEXT_STATE_DEACTIVATED == tcore_context_get_state(context->co_context)) {
 		ps_dbg_ex_co(co_network, "Remove context.");
-		__ps_context_remove_context(context);				
+		__ps_context_remove_context(context);
 	} else {
 		ps_warn_ex_co(co_network, "Remove profile not in deactivated state, set delete flag.");
 		context->delete_required = TRUE;
