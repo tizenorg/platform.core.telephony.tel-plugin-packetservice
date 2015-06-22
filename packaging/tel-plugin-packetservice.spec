@@ -23,6 +23,7 @@ BuildRequires:  pkgconfig(db-util)
 BuildRequires:  pkgconfig(vconf)
 BuildRequires: 	pkgconfig(alarm-service)
 BuildRequires:  pkgconfig(cynara-client)
+BuildRequires:  pkgconfig(cynara-creds-gdbus)
 BuildRequires:  pkgconfig(cynara-session)
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig

@@ -28,6 +28,7 @@
 #include <libxml/tree.h>
 
 #include <cynara-session.h>
+#include <cynara-creds-gdbus.h>
 
 #include "ps.h"
 
@@ -39,20 +40,13 @@
 gboolean ps_util_check_access_control (cynara *p_cynara, GDBusMethodInvocation *invoc, const char *label, const char *perm)
 {
 	GDBusConnection *conn;
-	GVariant *result_pid;
-	GVariant *param;
-	GError *error = NULL;
-	const char *sender;
-	unsigned int pid;
+	const char *sender_unique_name;
+	pid_t pid;
 	int ret;
 	int result = FALSE;
 	/* For cynara */
-	GVariant *result_uid;
-	GVariant *result_smack;
-	const gchar *unique_name = NULL;
 	gchar *client_smack = NULL;
 	char *client_session = NULL;
-	unsigned int uid;
 	gchar *uid_string = NULL;
 	const char *privilege = NULL;
 
@@ -67,86 +61,30 @@ gboolean ps_util_check_access_control (cynara *p_cynara, GDBusMethodInvocation *
 		goto OUT;
 	}
 
-	unique_name = g_dbus_connection_get_unique_name(conn);
-	if (!unique_name) {
-		warn ("access control denied (fail to get unique name)");
-		goto OUT;
-	}
-
-	sender = g_dbus_method_invocation_get_sender (invoc);
-
-	param = g_variant_new ("(s)", sender);
-	if (!param) {
-		warn ("access control denied (sender info fail)");
-		goto OUT;
-	}
+	sender_unique_name = g_dbus_method_invocation_get_sender (invoc);
 
 	/* Get PID */
-	result_pid = g_dbus_connection_call_sync (conn, "org.freedesktop.DBus",
-			"/org/freedesktop/DBus",
-			"org.freedesktop.DBus",
-			"GetConnectionUnixProcessID",
-			param, NULL,
-			G_DBUS_CALL_FLAGS_NONE, -1, NULL, &error);
-	if (error) {
-		warn ("access control denied (dbus error: %d(%s))",
-				error->code, error->message);
-		g_error_free (error);
+	ret = cynara_creds_gdbus_get_pid(conn, sender_unique_name, &pid);
+	if (ret != CYNARA_API_SUCCESS) {
+		warn ("access control denied (fail to get pid). ret = %d", ret);
 		goto OUT;
 	}
-
-	if (!result_pid) {
-		warn ("access control denied (fail to get pid)");
-		goto OUT;
-	}
-
-	g_variant_get (result_pid, "(u)", &pid);
-	g_variant_unref (result_pid);
 
 	/* Get UID */
-	result_uid = g_dbus_connection_call_sync (conn, "org.freedesktop.DBus",
-			"/org/freedesktop/DBus",
-			"org.freedesktop.DBus",
-			"GetConnectionUnixUser",
-			g_variant_new("(s)", unique_name), G_VARIANT_TYPE("(u)"),
-			G_DBUS_CALL_FLAGS_NONE, -1, NULL, &error);
-	if (error) {
-		warn ("access control denied (dbus error: %d(%s))",
-				error->code, error->message);
-		g_error_free (error);
+	ret = cynara_creds_gdbus_get_user(conn, sender_unique_name, USER_METHOD_DEFAULT, &uid_string);
+	if (ret != CYNARA_API_SUCCESS) {
+		warn ("access control denied (fail to get uid for cynara). ret = %d", ret);
 		goto OUT;
 	}
-
-	if (!result_uid) {
-		warn ("access control denied (fail to get uid for cynara)");
-		goto OUT;
-	}
-
-	g_variant_get (result_uid, "(u)", &uid);
-	g_variant_unref (result_uid);
-	uid_string = g_strdup_printf("%u", uid);
 
 	/* Get Smack label */
-	result_smack = g_dbus_connection_call_sync (conn, "org.freedesktop.DBus",
-			"/org/freedesktop/DBus",
-			"org.freedesktop.DBus",
-			"GetConnectionSmackContext",
-			g_variant_new("(s)", unique_name), G_VARIANT_TYPE("(s)"),
-			G_DBUS_CALL_FLAGS_NONE, -1, NULL, &error);
-	if (error) {
-		warn ("access control denied (dbus error: %d(%s))",
-				error->code, error->message);
-		g_error_free (error);
+	ret = cynara_creds_gdbus_get_client(conn, sender_unique_name, CLIENT_METHOD_DEFAULT, &client_smack);
+	if (ret != CYNARA_API_SUCCESS) {
+		warn ("access control denied (fail to get smack for cynara). ret = %d", ret);
 		goto OUT;
 	}
-	if (!result_smack) {
-		warn ("access control denied (fail to get smack for cynara)");
-		goto OUT;
-	}
-	g_variant_get (result_smack, "(s)", &client_smack);
-	g_variant_unref (result_smack);
 
-	dbg ("sender: %s pid = %u uid = %u smack = %s", sender, pid, uid, client_smack);
+	dbg ("sender: %s pid = %u uid = %s smack = %s", sender_unique_name, pid, uid_string, client_smack);
 
 	client_session = cynara_session_from_pid(pid);
 	if (!client_session) {
