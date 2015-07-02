@@ -37,7 +37,7 @@
 #define TELEPHONY_PRIVILEGE		"http://tizen.org/privilege/telephony"
 #define TELEPHONY_ADMIN_PRIVILEGE	"http://tizen.org/privilege/telephony.admin"
 
-gboolean ps_util_check_access_control (cynara *p_cynara, GDBusMethodInvocation *invoc, const char *label, const char *perm)
+gboolean ps_util_check_access_control(cynara *p_cynara, GDBusMethodInvocation *invoc, const char *label, const char *perm)
 {
 	GDBusConnection *conn;
 	const char *sender_unique_name;
@@ -51,62 +51,60 @@ gboolean ps_util_check_access_control (cynara *p_cynara, GDBusMethodInvocation *
 	const char *privilege = NULL;
 
 	if (!p_cynara) {
-		warn ("access control denied (fail to get cynara handle)");
+		warn("access control denied (fail to get cynara handle)");
 		goto OUT;
 	}
 
-	conn = g_dbus_method_invocation_get_connection (invoc);
+	conn = g_dbus_method_invocation_get_connection(invoc);
 	if (!conn) {
-		warn ("access control denied (no connection info)");
+		warn("access control denied (no connection info)");
 		goto OUT;
 	}
 
-	sender_unique_name = g_dbus_method_invocation_get_sender (invoc);
+	sender_unique_name = g_dbus_method_invocation_get_sender(invoc);
 
 	/* Get PID */
 	ret = cynara_creds_gdbus_get_pid(conn, sender_unique_name, &pid);
 	if (ret != CYNARA_API_SUCCESS) {
-		warn ("access control denied (fail to get pid). ret = %d", ret);
+		warn("access control denied (fail to get pid). ret = %d", ret);
 		goto OUT;
 	}
 
 	/* Get UID */
 	ret = cynara_creds_gdbus_get_user(conn, sender_unique_name, USER_METHOD_DEFAULT, &uid_string);
 	if (ret != CYNARA_API_SUCCESS) {
-		warn ("access control denied (fail to get uid for cynara). ret = %d", ret);
+		warn("access control denied (fail to get uid for cynara). ret = %d", ret);
 		goto OUT;
 	}
 
 	/* Get Smack label */
 	ret = cynara_creds_gdbus_get_client(conn, sender_unique_name, CLIENT_METHOD_DEFAULT, &client_smack);
 	if (ret != CYNARA_API_SUCCESS) {
-		warn ("access control denied (fail to get smack for cynara). ret = %d", ret);
+		warn("access control denied (fail to get smack for cynara). ret = %d", ret);
 		goto OUT;
 	}
 
-	dbg ("sender: %s pid = %u uid = %s smack = %s", sender_unique_name, pid, uid_string, client_smack);
+	dbg("sender: %s pid = %u uid = %s smack = %s", sender_unique_name, pid, uid_string, client_smack);
 
 	client_session = cynara_session_from_pid(pid);
 	if (!client_session) {
-		warn ("access control denied (fail to get cynara client session)");
+		warn("access control denied (fail to get cynara client session)");
 		goto OUT;
 	}
 
-	if (g_strrstr(perm, PERM_WRITE) == NULL && g_strrstr(perm, PERM_EXECUTE) == NULL) {
+	if (g_strrstr(perm, PERM_WRITE) == NULL && g_strrstr(perm, PERM_EXECUTE) == NULL)
 		privilege = TELEPHONY_PRIVILEGE;
-	} else {
+	else
 		privilege = TELEPHONY_ADMIN_PRIVILEGE;
-	}
 
 	ret = cynara_check(p_cynara, client_smack, client_session, uid_string, privilege);
-	if (ret != CYNARA_API_ACCESS_ALLOWED) {
-		warn ("pid(%u) access (%s - %s) denied(%d)", pid, label, perm, ret);
-	}
+	if (ret != CYNARA_API_ACCESS_ALLOWED)
+		warn("pid(%u) access (%s - %s) denied(%d)", pid, label, perm, ret);
 	else
 		result = TRUE;
 OUT:
 	if (result == FALSE) {
-		g_dbus_method_invocation_return_error (invoc,
+		g_dbus_method_invocation_return_error(invoc,
 				G_DBUS_ERROR,
 				G_DBUS_ERROR_ACCESS_DENIED,
 				"No access rights");
@@ -118,13 +116,15 @@ OUT:
 	return result;
 }
 
-GSource * ps_util_gsource_dispatch(GMainContext *main_context, gint priority, GSourceFunc cb, gpointer data)
+GSource *ps_util_gsource_dispatch(GMainContext *main_context, gint priority, GSourceFunc cb, gpointer data)
 {
 	GSource *request_source = NULL;
+
 	request_source = g_idle_source_new();
 	g_source_set_callback(request_source, cb, data, NULL);
 	g_source_set_priority(request_source, priority);
 	g_source_attach(request_source, main_context);
+
 	return request_source;
 }
 
@@ -137,6 +137,7 @@ gboolean ps_util_thread_dispatch(GMainContext *main_context, gint priority, GSou
 		err("Failed to dispatch");
 		return FALSE;
 	}
+
 	request_source = ps_util_gsource_dispatch(main_context, priority, cb, data);
 	g_source_unref(request_source);
 
@@ -145,43 +146,46 @@ gboolean ps_util_thread_dispatch(GMainContext *main_context, gint priority, GSou
 
 int ps_util_system_command(char *command)
 {
-    int pid = 0,
-        status = 0;
-    const char *environ[] = { NULL };
+	int pid = 0,
+	status = 0;
+	const char *environ[] = { NULL };
 
-    if (command == NULL)
-        return -1;
+	if (command == NULL)
+		return -1;
 
 	dbg("%s", command);
 
-    pid = fork();
-    if (pid == -1)
-        return -1;
-    if (pid == 0) {
-        char *argv[4];
-        argv[0] = "sh";
-        argv[1] = "-c";
-        argv[2] = (char *)command;
-        argv[3] = 0;
-        execve("/bin/sh", argv, (char **)environ);
-        exit(127);
-    }
-    do {
-        if (waitpid(pid, &status, 0) == -1) {
-            if (errno != EINTR)
-                return -1;
-        } else {
-            if (WIFEXITED(status)) {
-                return WEXITSTATUS(status);
-            } else if (WIFSIGNALED(status)) {
-                return WTERMSIG(status);
-            } else if (WIFSTOPPED(status)) {
-                return WSTOPSIG(status);
-            }
-        }
-    } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+	pid = fork();
+	if (pid == -1)
+		return -1;
 
-    return 0;
+	if (pid == 0) {
+		char *argv[4];
+
+		argv[0] = "sh";
+		argv[1] = "-c";
+		argv[2] = (char *)command;
+		argv[3] = 0;
+
+		execve("/bin/sh", argv, (char **)environ);
+		exit(127);
+	}
+
+	do {
+		if (waitpid(pid, &status, 0) == -1) {
+			if (errno != EINTR)
+				return -1;
+		} else {
+			if (WIFEXITED(status))
+				return WEXITSTATUS(status);
+			else if (WIFSIGNALED(status))
+				return WTERMSIG(status);
+			else if (WIFSTOPPED(status))
+				return WSTOPSIG(status);
+		}
+	} while (!WIFEXITED(status) && !WIFSIGNALED(status));
+
+	return 0;
 }
 
 void ps_util_load_xml_file(const char *docname, const char *groupname, void **i_doc, void **i_root_node)
@@ -196,7 +200,7 @@ void ps_util_load_xml_file(const char *docname, const char *groupname, void **i_
 		*root_node = xmlDocGetRootElement(*doc);
 		if (*root_node) {
 			dbg("*root_node->name:%s", (*root_node)->name);
-			if (0 == xmlStrcmp((*root_node)->name, (const xmlChar *) groupname)) {
+			if (0 == xmlStrcmp((*root_node)->name, (const unsigned char *)groupname)) {
 				dbg("root_node is found !!!");
 				return;
 			} else {

@@ -34,7 +34,7 @@
 #include <libxml/tree.h>
 
 #define DATABASE_PATH "/opt/dbspace/.dnet.db"
-#define msg(fmt,args...) { printf(fmt "\n", ##args); fflush(stdout);}
+#define msg(fmt, args...) do { printf(fmt "\n", ##args); fflush(stdout); } while (0)
 
 enum context_type {
 	CONTEXT_TYPE_UNKNOWN,
@@ -58,43 +58,46 @@ enum context_role {
 
 static int __system_command(char *command)
 {
-    int pid = 0,
-        status = 0;
-    const char *environ[] = { NULL };
+	int pid = 0,
+	status = 0;
+	const char *environ[] = { NULL };
 
-    if (command == NULL)
-        return -1;
+	if (command == NULL)
+		return -1;
 
 	msg("%s", command);
 
-    pid = fork();
-    if (pid == -1)
-        return -1;
-    if (pid == 0) {
-        char *argv[4];
-        argv[0] = "sh";
-        argv[1] = "-c";
-        argv[2] = (char *)command;
-        argv[3] = 0;
-        execve("/bin/sh", argv, (char **)environ);
-        exit(127);
-    }
-    do {
-        if (waitpid(pid, &status, 0) == -1) {
-            if (errno != EINTR)
-                return -1;
-        } else {
-            if (WIFEXITED(status)) {
-                return WEXITSTATUS(status);
-            } else if (WIFSIGNALED(status)) {
-                return WTERMSIG(status);
-            } else if (WIFSTOPPED(status)) {
-                return WSTOPSIG(status);
-            }
-        }
-    } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+	pid = fork();
+	if (pid == -1)
+		return -1;
 
-    return 0;
+	if (pid == 0) {
+		char *argv[4];
+
+		argv[0] = "sh";
+		argv[1] = "-c";
+		argv[2] = (char *)command;
+		argv[3] = 0;
+
+		execve("/bin/sh", argv, (char **)environ);
+		exit(127);
+	}
+
+	do {
+		if (waitpid(pid, &status, 0) == -1) {
+			if (errno != EINTR)
+				return -1;
+		} else {
+			if (WIFEXITED(status))
+				return WEXITSTATUS(status);
+			else if (WIFSIGNALED(status))
+				return WTERMSIG(status);
+			else if (WIFSTOPPED(status))
+				return WSTOPSIG(status);
+		}
+	} while (!WIFEXITED(status) && !WIFSIGNALED(status));
+
+	return 0;
 }
 
 static void __load_xml_file(const char *docname, const char *groupname, void **i_doc, void **i_root_node)
@@ -109,7 +112,7 @@ static void __load_xml_file(const char *docname, const char *groupname, void **i
 		*root_node = xmlDocGetRootElement(*doc);
 		if (*root_node) {
 			msg("*root_node->name:%s", (*root_node)->name);
-			if (0 == xmlStrcmp((*root_node)->name, (const xmlChar *) groupname)) {
+			if (0 == xmlStrcmp((*root_node)->name, (const unsigned char *)groupname)) {
 				msg("root_node is found !!!");
 				return;
 			} else {
@@ -138,7 +141,7 @@ static void __unload_xml_file(void **i_doc, void **i_root_node)
 	}
 }
 
-static void* create_handle(const char *path)
+static void *create_handle(const char *path)
 {
 	int rv = 0;
 	sqlite3 *handle = NULL;
@@ -159,7 +162,6 @@ static gboolean remove_handle(void *handle)
 		return FALSE;
 
 	db_util_close(handle);
-	//free(handle);
 
 	msg("disconnected from database");
 	return TRUE;
@@ -169,15 +171,15 @@ static gboolean read_query_database(void *handle, const char *query, GHashTable 
 		GHashTable *out_param, int out_param_cnt)
 {
 	int rv = 0, index = 0, outter_index = 0;
-	sqlite3_stmt* stmt = NULL;
-	char szQuery[5000];
+	sqlite3_stmt *stmt = NULL;
+	char szQuery[5000+1];	/* +1 is for NULL Termination Character '\0' */
 
 	GHashTableIter iter;
 	gpointer key, value;
 
 	msg("read query");
 
-	memset(szQuery, '\0', 5000);
+	memset(szQuery, '\0', 5001);
 	strncpy(szQuery, query, 5000);
 
 	rv = sqlite3_prepare_v2(handle, szQuery, strlen(szQuery), &stmt, NULL);
@@ -189,15 +191,14 @@ static gboolean read_query_database(void *handle, const char *query, GHashTable 
 	if (in_param) {
 		g_hash_table_iter_init(&iter, in_param);
 		while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
-			msg("key(%s), value(%s)", (const char*)key, (const char*)value);
+			msg("key(%s), value(%s)", (const char *)key, (const char *)value);
 
-			if (!value || g_strcmp0((const char*) value, "") == 0) {
+			if (!value || g_strcmp0((const char *) value, "") == 0) {
 				msg("bind null");
-				rv = sqlite3_bind_null(stmt, atoi((const char*) key));
-			}
-			else {
+				rv = sqlite3_bind_null(stmt, atoi((const char *) key));
+			} else {
 				msg("bind value");
-				rv = sqlite3_bind_text(stmt, atoi((const char*) key), (const char*) value, strlen((const char*) value),
+				rv = sqlite3_bind_text(stmt, atoi((const char *) key), (const char *) value, strlen((const char *) value),
 						SQLITE_STATIC);
 			}
 
@@ -238,14 +239,14 @@ static gboolean read_query_database(void *handle, const char *query, GHashTable 
 static gboolean query_database(void *handle, const char *query, GHashTable *in_param)
 {
 	int rv = 0;
-	sqlite3_stmt* stmt = NULL;
-	char szQuery[5000];
+	sqlite3_stmt *stmt = NULL;
+	char szQuery[5000+1];	/* +1 is for NULL Termination Character '\0' */
 
 	GHashTableIter iter;
 	gpointer key, value;
 	msg("query database");
 
-	memset(szQuery, '\0', 5000);
+	memset(szQuery, '\0', 5001);
 	strncpy(szQuery, query, 5000);
 
 	rv = sqlite3_prepare_v2(handle, szQuery, strlen(szQuery), &stmt, NULL);
@@ -254,18 +255,17 @@ static gboolean query_database(void *handle, const char *query, GHashTable *in_p
 		return FALSE;
 	}
 
-	if(in_param) {
+	if (in_param) {
 		g_hash_table_iter_init(&iter, in_param);
 		while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
-			msg("key(%s), value(%s)", (const char*)key, (const char*)value);
+			msg("key(%s), value(%s)", (const char *)key, (const char *)value);
 
-			if (!value || g_strcmp0((const char*) value, "") == 0) {
+			if (!value || g_strcmp0((const char *) value, "") == 0) {
 				msg("bind null");
-				rv = sqlite3_bind_null(stmt, atoi((const char*) key));
-			}
-			else {
+				rv = sqlite3_bind_null(stmt, atoi((const char *) key));
+			} else {
 				msg("bind value");
-				rv = sqlite3_bind_text(stmt, atoi((const char*) key), (const char*) value, strlen((const char*) value),
+				rv = sqlite3_bind_text(stmt, atoi((const char *) key), (const char *) value, strlen((const char *) value),
 						SQLITE_STATIC);
 			}
 
@@ -280,9 +280,9 @@ static gboolean query_database(void *handle, const char *query, GHashTable *in_p
 	msg("query executed (%d)", rv);
 	sqlite3_finalize(stmt);
 
-	if (rv != SQLITE_DONE) {
+	if (rv != SQLITE_DONE)
 		return FALSE;
-	}
+
 	return TRUE;
 }
 
@@ -340,7 +340,7 @@ static int __insert_network_id_to_database(gchar *mccmnc)
 
 	/* SQL query */
 	memset(szQuery, 0x0, sizeof(szQuery));
-	strcpy(szQuery,"select max(network_info_id) as network_id from network_info");
+	strcpy(szQuery, "select max(network_info_id) as network_id from network_info");
 
 	rv = read_query_database(handle, szQuery, NULL, out_param, 1);
 	msg("Read Database: [%s]", (rv == TRUE ? "SUCCESS" : "FAIL"));
@@ -353,20 +353,17 @@ static int __insert_network_id_to_database(gchar *mccmnc)
 		if (value) {
 			g_hash_table_iter_init(&iter2, (GHashTable *)value);
 			while (g_hash_table_iter_next(&iter2, &key2, &value2) == TRUE) {
-				msg("key2(%s) value2(%s)",(const char*)key2, (const char*)value2);
+				msg("key2(%s) value2(%s)", (const char *)key2, (const char *)value2);
 				if (g_str_equal(key2, "0") == TRUE) {
-					if (!value2 || g_strcmp0((const char*)value2, "") == 0) {
+					if (!value2 || g_strcmp0((const char *)value2, "") == 0)
 						network_id = 0;
-					}
-					else{
-						network_id = atoi((const char*)value2);
-					}
+					else
+						network_id = atoi((const char *)value2);
 
 					/* TODO - Check this logic */
 					break;
 				}
 			}
-			//break;	/* TODO - Check this logic */
 		}
 	}
 
@@ -378,7 +375,7 @@ static int __insert_network_id_to_database(gchar *mccmnc)
 
 	/* SQL query */
 	memset(szQuery, 0x0, sizeof(szQuery));
-	strcpy(szQuery," insert into network_info( network_info_id, network_name, mccmnc) values( ?, ?, ?) ");
+	strcpy(szQuery, " insert into network_info(network_info_id, network_name, mccmnc) values(?, ?, ?) ");
 
 	/* Initialize parameters */
 	in_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
@@ -430,7 +427,7 @@ static int __load_network_id_from_database(gchar *mccmnc)
 
 	/* SQL Query */
 	memset(szQuery, 0x0, sizeof(szQuery));
-	strcpy(szQuery,"select network_info_id from network_info where mccmnc = ? ");
+	strcpy(szQuery, "select network_info_id from network_info where mccmnc = ? ");
 
 	rv = read_query_database(handle, szQuery, in_param, out_param, 1);
 	msg("Read Database: [%s]", (rv == TRUE ? "SUCCESS" : "FAIL"));
@@ -444,18 +441,15 @@ static int __load_network_id_from_database(gchar *mccmnc)
 			g_hash_table_iter_init(&iter2, (GHashTable *)value);
 			while (g_hash_table_iter_next(&iter2, &key2, &value2) == TRUE) {
 				if (g_str_equal(key2, "0") == TRUE) {
-					if (!value2 || (g_strcmp0((const char*)value2, "") == 0)) {
+					if (!value2 || (g_strcmp0((const char *)value2, "") == 0))
 						network_id = 0;
-					}
-					else {
-						network_id = atoi((const char*)value2);
-					}
+					else
+						network_id = atoi((const char *)value2);
 
 					/* TODO - Check this out */
 					break;
 				}
 			}
-			//break;	/* TODO - Check this out */
 		}
 	}
 
@@ -476,11 +470,11 @@ static int __get_network_id(gchar *mccmnc)
 
 	network_id = __load_network_id_from_database(mccmnc);
 	msg("network id(%d)", network_id);
-	if(network_id > 0)
+	if (network_id > 0)
 		return network_id;
 
 	network_id = __insert_network_id_to_database(mccmnc);
-	if(network_id <= 0 )
+	if (network_id <= 0)
 		return -1;
 
 	return network_id;
@@ -525,18 +519,15 @@ static int __load_profile_id_from_database(void)
 			g_hash_table_iter_init(&iter2, (GHashTable *)value);
 			while (g_hash_table_iter_next(&iter2, &key2, &value2) == TRUE) {
 				if (g_str_equal(key2, "0") == TRUE) {
-					if (!value2 || (g_strcmp0((const char*)value2, "") == 0)) {
+					if (!value2 || (g_strcmp0((const char *)value2, "") == 0))
 						profile_id = 0;
-					}
-					else{
-						profile_id = atoi((const char*)value2);
-					}
+					else
+						profile_id = atoi((const char *)value2);
 
 					/* TODO - Check this logic */
 					break;
 				}
 			}
-			//break;	/* TODO - Check this logic */
 		}
 	}
 
@@ -572,14 +563,14 @@ static gboolean __get_default_profile_from_database(int network_info_id, int svc
 
 	/* SQL query */
 	memset(szQuery, 0x0, sizeof(szQuery));
-	strcpy(szQuery,"select profile_id from pdp_profile ");
-	strcat(szQuery,"where network_info_id = ? and svc_category_id = ? and default_internet_con = 1");
+	strcpy(szQuery, "select profile_id from pdp_profile ");
+	strcat(szQuery, "where network_info_id = ? and svc_category_id = ? and default_internet_con = 1");
 
 	rv = read_query_database(handle, szQuery, in_param, out_param, 1);
 	msg("Read Database: [%s]", (rv == TRUE ? "SUCCESS" : "FAIL"));
 
 	profile_cnt = g_hash_table_size(out_param);
-	if(profile_cnt > 0) {
+	if (profile_cnt > 0) {
 		msg("default profile for (svc_category_id: %d, network_info_id: %d) exists: count[%d]",
 			svc_category_id, network_info_id, profile_cnt);
 		ret = TRUE;
@@ -599,7 +590,7 @@ static gboolean __insert_apns_to_database(GHashTable *in_param)
 	char szQuery[5000];
 	gboolean rv = FALSE;
 
-	if(in_param == NULL) {
+	if (in_param == NULL) {
 		msg("in_param is NULL !!!");
 		return rv;
 	}
@@ -612,13 +603,13 @@ static gboolean __insert_apns_to_database(GHashTable *in_param)
 	}
 	/* SQL query */
 	memset(szQuery, 0x0, sizeof(szQuery));
-	strcpy(szQuery," insert into pdp_profile( ");
-	strcat(szQuery," profile_id, profile_name, apn, auth_type, auth_id, auth_pwd, ");
-	strcat(szQuery," pdp_protocol, svc_category_id, proxy_ip_addr, home_url, linger_time,");
-	strcat(szQuery," network_info_id, hidden, editable, default_internet_con, user_defined) values( ");
-	strcat(szQuery," ?, ?, ?, ?, ?, ?,");//1,2,3,4,5,6(auth_pwd)
-	strcat(szQuery," ?, ?, ?, ?, 300,");//7,8,9,10(home_url)
-	strcat(szQuery," ?, 0, 1, ?, 0)");//11,12(default_internet_con)
+	strcpy(szQuery, " insert into pdp_profile(");
+	strcat(szQuery, " profile_id, profile_name, apn, auth_type, auth_id, auth_pwd, ");
+	strcat(szQuery, " pdp_protocol, svc_category_id, proxy_ip_addr, home_url, linger_time, ");
+	strcat(szQuery, " network_info_id, hidden, editable, default_internet_con, user_defined) values(");
+	strcat(szQuery, " ?, ?, ?, ?, ?, ?, ");/* 1, 2, 3, 4, 5, 6(auth_pwd) */
+	strcat(szQuery, " ?, ?, ?, ?, 300, ");/* 7, 8, 9, 10(home_url) */
+	strcat(szQuery, " ?, 0, 1, ?, 0)");/* 11, 12(default_internet_con) */
 
 	rv = query_database(handle, szQuery, in_param);
 	msg("Insert to Database: [%s]", (rv == TRUE ? "SUCCESS" : "FAIL"));
@@ -635,11 +626,11 @@ static gboolean __duplicate_profile_by_type(GHashTable *in_param, gpointer node,
 	gchar *in_tuple = NULL;
 	int profile_index;
 
-	if(!in_param || !node)
+	if (!in_param || !node)
 		return FALSE;
 
 	tmp = g_hash_table_lookup(in_param, "1");
-	if(tmp) { // profile_id
+	if (tmp) { /* profile_id */
 		profile_index = atoi((char *)tmp);
 		profile_index++;
 		g_hash_table_insert(in_param, "1", g_strdup_printf("%d", profile_index));
@@ -648,22 +639,22 @@ static gboolean __duplicate_profile_by_type(GHashTable *in_param, gpointer node,
 		return FALSE;
 	}
 
-	{// svc_category_id
+	{/* svc_category_id */
 		g_hash_table_insert(in_param, "8", g_strdup_printf("%d", svc_category_id));
 		msg("svc_category_id = %d", svc_category_id);
 	}
 
-	{// proxy ip
+	{/* proxy ip */
 		gchar *proxy_ip_addr = NULL, *proxy = NULL, *port = NULL;
 
-		if(svc_category_id == CONTEXT_ROLE_MMS) {
-			proxy = (char *)xmlGetProp(cur_node, (const xmlChar *)"mmsproxy");
-			port = (char *)xmlGetProp(cur_node, (const xmlChar *)"mmsport");
+		if (svc_category_id == CONTEXT_ROLE_MMS) {
+			proxy = (char *)xmlGetProp(cur_node, (const unsigned char *)"mmsproxy");
+			port = (char *)xmlGetProp(cur_node, (const unsigned char *)"mmsport");
 		} else {
-			proxy = (char *)xmlGetProp(cur_node, (const xmlChar *)"proxy");
-			port = (char *)xmlGetProp(cur_node, (const xmlChar *)"port");
+			proxy = (char *)xmlGetProp(cur_node, (const unsigned char *)"proxy");
+			port = (char *)xmlGetProp(cur_node, (const unsigned char *)"port");
 		}
-		if(proxy && port) {
+		if (proxy && port) {
 			proxy_ip_addr = g_strdup_printf("%s:%s", proxy, port);
 			in_tuple = g_strdup(proxy_ip_addr);
 			g_free(proxy_ip_addr);
@@ -675,10 +666,10 @@ static gboolean __duplicate_profile_by_type(GHashTable *in_param, gpointer node,
 		g_free(in_tuple);
 	}
 
-	{//home url
+	{/* home url */
 		gchar *mmsc = NULL;
-		mmsc = (char *)xmlGetProp(cur_node, (const xmlChar *)"mmsc");
-		if(mmsc && svc_category_id == CONTEXT_ROLE_MMS)
+		mmsc = (char *)xmlGetProp(cur_node, (const unsigned char *)"mmsc");
+		if (mmsc && svc_category_id == CONTEXT_ROLE_MMS)
 			in_tuple = g_strdup(mmsc);
 		else
 			in_tuple = g_strdup("");
@@ -687,14 +678,14 @@ static gboolean __duplicate_profile_by_type(GHashTable *in_param, gpointer node,
 		g_free(in_tuple);
 	}
 
-	{//default internet connection
-		int default_internet_con = 1; // default
+	{/* default internet connection */
+		int default_internet_con = 1; /* default */
 
-		tmp = g_hash_table_lookup(in_param, "11"); // network_info_id
-		if(tmp) {
+		tmp = g_hash_table_lookup(in_param, "11"); /* network_info_id */
+		if (tmp) {
 			int network_info_id = atoi((char *)tmp);
 			msg("network_info_id = %d", network_info_id);
-			if(network_info_id > 0 && __get_default_profile_from_database(network_info_id, svc_category_id))
+			if (network_info_id > 0 && __get_default_profile_from_database(network_info_id, svc_category_id))
 				default_internet_con = 0;
 		}
 		g_hash_table_insert(in_param, "12", g_strdup_printf("%d", default_internet_con));
@@ -712,25 +703,25 @@ static GHashTable *__construct_profile_tuples(gpointer node)
 	gchar *in_tuple = NULL;
 	int profile_id = 0, network_info_id = -1, svc_category_id = 0;
 
-	if(!cur_node)
+	if (!cur_node)
 		return NULL;
 
 	/* Initialize parameters */
 	in_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
 
-	{//profile id
+	{/* profile id */
 		profile_id = __load_profile_id_from_database();
 		profile_id++;
 		g_hash_table_insert(in_param, "1", g_strdup_printf("%d", profile_id));
 		msg("profile_id = %d", profile_id);
 	}
 
-	{//profile name
+	{/* profile name */
 		gchar *profile_name = NULL;
-		profile_name = (char *)xmlGetProp(cur_node, (const xmlChar *)"carrier");
-		if(profile_name) {
+		profile_name = (char *)xmlGetProp(cur_node, (const unsigned char *)"carrier");
+		if (profile_name)
 			in_tuple = g_strdup(profile_name);
-		} else
+		else
 			in_tuple = g_strdup_printf("TEMP_PROFILE_%d", profile_id);
 
 		g_hash_table_insert(in_param, "2", g_strdup(in_tuple));
@@ -738,10 +729,10 @@ static GHashTable *__construct_profile_tuples(gpointer node)
 		g_free(in_tuple);
 	}
 
-	{//apn
+	{/* apn */
 		gchar *apn = NULL;
-		apn = (char *)xmlGetProp(cur_node, (const xmlChar *)"apn");
-		if(apn)
+		apn = (char *)xmlGetProp(cur_node, (const unsigned char *)"apn");
+		if (apn)
 			in_tuple = g_strdup(apn);
 		else
 			in_tuple = g_strdup("");
@@ -750,26 +741,26 @@ static GHashTable *__construct_profile_tuples(gpointer node)
 		g_free(in_tuple);
 	}
 
-	{//auth type
+	{/* auth type */
 		gchar *auth_type = NULL, *auth = NULL;
-		auth_type = (char *)xmlGetProp(cur_node, (const xmlChar *)"auth_type");
-		auth = (char *)xmlGetProp(cur_node, (const xmlChar *)"auth");
-		if(auth_type) {
+		auth_type = (char *)xmlGetProp(cur_node, (const unsigned char *)"auth_type");
+		auth = (char *)xmlGetProp(cur_node, (const unsigned char *)"auth");
+		if (auth_type)
 			in_tuple = g_strdup(auth_type);
-		} else if (auth) {
+		else if (auth)
 			in_tuple = g_strdup(auth);
-		} else {
-			in_tuple = g_strdup("0"); // CONTEXT_AUTH_NONE
-		}
+		else
+			in_tuple = g_strdup("0"); /* CONTEXT_AUTH_NONE */
+
 		g_hash_table_insert(in_param, "4", g_strdup(in_tuple));
 		msg("auth_type = %s", in_tuple);
 		g_free(in_tuple);
 	}
 
-	{//auth id
+	{/* auth id */
 		gchar *auth_id = NULL;
-		auth_id = (char *)xmlGetProp(cur_node, (const xmlChar *)"user");
-		if(auth_id)
+		auth_id = (char *)xmlGetProp(cur_node, (const unsigned char *)"user");
+		if (auth_id)
 			in_tuple = g_strdup(auth_id);
 		else
 			in_tuple = g_strdup("");
@@ -778,10 +769,10 @@ static GHashTable *__construct_profile_tuples(gpointer node)
 		g_free(in_tuple);
 	}
 
-	{//auth pwd
+	{/* auth pwd */
 		gchar *auth_pwd = NULL;
-		auth_pwd = (char *)xmlGetProp(cur_node, (const xmlChar *)"password");
-		if(auth_pwd)
+		auth_pwd = (char *)xmlGetProp(cur_node, (const unsigned char *)"password");
+		if (auth_pwd)
 			in_tuple = g_strdup(auth_pwd);
 		else
 			in_tuple = g_strdup("");
@@ -790,45 +781,45 @@ static GHashTable *__construct_profile_tuples(gpointer node)
 		g_free(in_tuple);
 	}
 
-	{//pdp protocol
+	{/* pdp protocol */
 		gchar *protocol = NULL;
 		int pdp_protocol = CONTEXT_TYPE_IP;
-		protocol = (char *)xmlGetProp(cur_node, (const xmlChar *)"protocol");
-		if(protocol) {
-			if(!g_strcmp0(protocol, "IPV6"))
+		protocol = (char *)xmlGetProp(cur_node, (const unsigned char *)"protocol");
+		if (protocol) {
+			if (!g_strcmp0(protocol, "IPV6"))
 				pdp_protocol = CONTEXT_TYPE_IPV6;
-			else if(!g_strcmp0(protocol, "IPV4V6"))
+			else if (!g_strcmp0(protocol, "IPV4V6"))
 				pdp_protocol = CONTEXT_TYPE_IPV4V6;
 		}
 		g_hash_table_insert(in_param, "7", g_strdup_printf("%d", pdp_protocol));
 		msg("protocol = %s", protocol);
 	}
 
-	{//service category id
+	{/* service category id */
 		gchar *svc_type = NULL;
-		svc_type = (char *)xmlGetProp(cur_node, (const xmlChar *)"type");
-		if(NULL != g_strrstr(svc_type, "default")) {
+		svc_type = (char *)xmlGetProp(cur_node, (const unsigned char *)"type");
+		if (NULL != g_strrstr(svc_type, "default"))
 			svc_category_id = CONTEXT_ROLE_INTERNET;
-		} else if(!g_strcmp0(svc_type, "mms")) {
+		else if (!g_strcmp0(svc_type, "mms"))
 			svc_category_id = CONTEXT_ROLE_MMS;
-		} else if(!g_strcmp0(svc_type, "dun")) {
+		else if (!g_strcmp0(svc_type, "dun"))
 			svc_category_id = CONTEXT_ROLE_TETHERING;
-		}
+
 		g_hash_table_insert(in_param, "8", g_strdup_printf("%d", svc_category_id));
 		msg("svc_category_id = %d", svc_category_id);
 	}
 
-	{// proxy ip
+	{/* proxy ip */
 		gchar *proxy_ip_addr = NULL, *proxy = NULL, *port = NULL;
 
-		if(svc_category_id == CONTEXT_ROLE_MMS) {
-			proxy = (char *)xmlGetProp(cur_node, (const xmlChar *)"mmsproxy");
-			port = (char *)xmlGetProp(cur_node, (const xmlChar *)"mmsport");
+		if (svc_category_id == CONTEXT_ROLE_MMS) {
+			proxy = (char *)xmlGetProp(cur_node, (const unsigned char *)"mmsproxy");
+			port = (char *)xmlGetProp(cur_node, (const unsigned char *)"mmsport");
 		} else {
-			proxy = (char *)xmlGetProp(cur_node, (const xmlChar *)"proxy");
-			port = (char *)xmlGetProp(cur_node, (const xmlChar *)"port");
+			proxy = (char *)xmlGetProp(cur_node, (const unsigned char *)"proxy");
+			port = (char *)xmlGetProp(cur_node, (const unsigned char *)"port");
 		}
-		if(proxy && port) {
+		if (proxy && port) {
 			proxy_ip_addr = g_strdup_printf("%s:%s", proxy, port);
 			in_tuple = g_strdup(proxy_ip_addr);
 			g_free(proxy_ip_addr);
@@ -840,10 +831,10 @@ static GHashTable *__construct_profile_tuples(gpointer node)
 		g_free(in_tuple);
 	}
 
-	{//home url
+	{/* home url */
 		gchar *mmsc = NULL;
-		mmsc = (char *)xmlGetProp(cur_node, (const xmlChar *)"mmsc");
-		if(mmsc && svc_category_id == CONTEXT_ROLE_MMS)
+		mmsc = (char *)xmlGetProp(cur_node, (const unsigned char *)"mmsc");
+		if (mmsc && svc_category_id == CONTEXT_ROLE_MMS)
 			in_tuple = g_strdup(mmsc);
 		else
 			in_tuple = g_strdup("");
@@ -852,12 +843,12 @@ static GHashTable *__construct_profile_tuples(gpointer node)
 		g_free(in_tuple);
 	}
 
-	{//network info id
+	{/* network info id */
 		gchar *plmn = NULL, *mcc = NULL, *mnc = NULL;
-		mcc = (char *)xmlGetProp(cur_node, (const xmlChar *)"mcc");
-		mnc = (char *)xmlGetProp(cur_node, (const xmlChar *)"mnc");
+		mcc = (char *)xmlGetProp(cur_node, (const unsigned char *)"mcc");
+		mnc = (char *)xmlGetProp(cur_node, (const unsigned char *)"mnc");
 
-		if(mcc && mnc) {
+		if (mcc && mnc) {
 			plmn = g_strdup_printf("%s%s", mcc, mnc);
 			msg("mccmnc = %s", plmn);
 			network_info_id = __get_network_id(plmn);
@@ -867,9 +858,9 @@ static GHashTable *__construct_profile_tuples(gpointer node)
 		msg("network_info_id = %d", network_info_id);
 	}
 
-	{//default internet connection
+	{/* default internet connection */
 		int default_internet_con = 1;
-		if(__get_default_profile_from_database(network_info_id, svc_category_id))
+		if (__get_default_profile_from_database(network_info_id, svc_category_id))
 			default_internet_con = 0;
 		g_hash_table_insert(in_param, "12", g_strdup_printf("%d", default_internet_con));
 		msg("default_internet_con = %d", default_internet_con);
@@ -886,7 +877,7 @@ static gboolean __init_global_apns_from_xml(const char *file_path)
 	char *version = NULL;
 	gboolean ret = FALSE;
 
-	// remove pdp_profile table first.
+	/* remove pdp_profile table first. */
 	__reset_database();
 
 	__load_xml_file(file_path, "apns", &xml_doc, &xml_root_node);
@@ -895,12 +886,12 @@ static gboolean __init_global_apns_from_xml(const char *file_path)
 		goto EXIT;
 	}
 	root_node = (xmlNodePtr)xml_root_node;
-	version = (char *)xmlGetProp(root_node, (const xmlChar *)"version");
-	if(version)
+	version = (char *)xmlGetProp(root_node, (const unsigned char *)"version");
+	if (version)
 		msg("apns-conf.xml <apns version=\"%s\">", version);
 	cur = root_node->xmlChildrenNode;
 	/* Compare property */
-	for(cur_node = cur; cur_node; cur_node = cur_node->next) {
+	for (cur_node = cur; cur_node; cur_node = cur_node->next) {
 		if (cur_node->type == XML_ELEMENT_NODE) {
 			GHashTable *in_param = NULL;
 			gchar *svc_type = NULL;
@@ -908,21 +899,21 @@ static gboolean __init_global_apns_from_xml(const char *file_path)
 
 			in_param = __construct_profile_tuples(cur_node);
 			rv = __insert_apns_to_database(in_param);
-			if(rv == FALSE)
+			if (rv == FALSE)
 				continue;
 
 			/* duplicate profiles for the same APNs */
-			svc_type = (char *)xmlGetProp(cur_node, (const xmlChar *)"type");
-			if(NULL != g_strrstr(svc_type, "default")) {
-				if(NULL != g_strrstr(svc_type, "mms")) {
-					//type="default,supl,mms"
+			svc_type = (char *)xmlGetProp(cur_node, (const unsigned char *)"type");
+			if (NULL != g_strrstr(svc_type, "default")) {
+				if (NULL != g_strrstr(svc_type, "mms")) {
+					/* type="default, supl, mms" */
 					__duplicate_profile_by_type(in_param, cur_node, CONTEXT_ROLE_MMS);
-					if(NULL != g_strrstr(svc_type, "dun")) {
-						//type="default,supl,mms,dun"
+					if (NULL != g_strrstr(svc_type, "dun")) {
+						/* type="default, supl, mms, dun" */
 						__duplicate_profile_by_type(in_param, cur_node, CONTEXT_ROLE_TETHERING);
 					}
-				} else if(NULL != g_strrstr(svc_type, "dun")) {
-					//type="default,supl,dun"
+				} else if (NULL != g_strrstr(svc_type, "dun")) {
+					/* type="default, supl, dun" */
 					__duplicate_profile_by_type(in_param, cur_node, CONTEXT_ROLE_TETHERING);
 				}
 			}

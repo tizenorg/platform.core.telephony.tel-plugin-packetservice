@@ -29,9 +29,6 @@
 		<signal name="ServiceRemoved">
 			<arg  type="s" name="service_path" direction="out" />
 		</signal>
-		<signal name="DedicatedBearerInfo">
-			<arg  type="a{ss}" name="dedicated_bearer" direction="out" />
-		</signal>
 		<signal name="ResetProfileComplete">
 			<arg type="b" name="result" direction="out" />
 		</signal>

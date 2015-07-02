@@ -52,8 +52,7 @@ CREATE TABLE pdp_profile(
 	hidden               INTEGER,
 	editable             INTEGER,
 	default_internet_con INTEGER,
-	user_defined         INTEGER,
-	attach_apn           INTEGER
+	user_defined         INTEGER
 	);
 
 DROP TABLE IF EXISTS "svc_category";
@@ -649,7 +648,7 @@ INSERT INTO network_info VALUES(569, "KT Viva","41904");
 INSERT INTO network_info VALUES(570, "Zain KW","41902");
 INSERT INTO network_info VALUES(571, "KT WATANIYA","41903");
 INSERT INTO network_info VALUES(572, "ETL MOBILE NETWORK","45702");
-INSERT INTO network_info VALUES(573, "","45701");
+INSERT INTO network_info VALUES(573, "Lao Telecom","45701");
 INSERT INTO network_info VALUES(574, "Unitel","45703");
 INSERT INTO network_info VALUES(575, "TIGO LAO","45708");
 INSERT INTO network_info VALUES(576, "alfa","41501");
@@ -1161,7 +1160,7 @@ INSERT INTO "network_info" VALUES(1081,'PLMN_405911','405911');
 INSERT INTO "network_info" VALUES(1082,'PLMN_404891','404891');
 INSERT INTO "network_info" VALUES(1083,'PLMN_404220','404220');
 INSERT INTO "network_info" VALUES(1084,'PLMN_405932','405932');
-INSERT INTO "network_info" VALUES(1085,'PLMN_41503','41503');
+INSERT INTO "network_info" VALUES(1085,'MTC Touch','41503');
 INSERT INTO "network_info" VALUES(1086,'PLMN_42501','42501');
 INSERT INTO "network_info" VALUES(1087,'PLMN_45011','45011');
 INSERT INTO "network_info" VALUES(1088,'PLMN_45201','45201');
@@ -1198,4 +1197,8 @@ INSERT INTO "network_info" VALUES(1118,'PLMN_73403','73403');
 INSERT INTO "network_info" VALUES(1119,'PLMN_740010','740010');
 INSERT INTO "network_info" VALUES(1120,'PLMN_311870','311870');
 INSERT INTO "network_info" VALUES(1121,'PLMN_311490','311490');
-INSERT INTO network_info VALUES(1122,"GCF3","00102");
+INSERT INTO network_info VALUES(1122, "GCF3","00102");
+INSERT INTO network_info VALUES(1123, "Telenor","41406");
+INSERT INTO network_info VALUES(1124, "Glo NG","62170");
+INSERT INTO network_info VALUES(1125, "Etisalat Nigeria","62190");
+INSERT INTO network_info VALUES(1126, "ASIACELL","41850");

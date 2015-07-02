@@ -43,8 +43,7 @@ static void on_unload(TcorePlugin *plugin)
 	ps_main_exit(plugin);
 }
 
-EXPORT_API struct tcore_plugin_define_desc plugin_define_desc =
-{
+EXPORT_API struct tcore_plugin_define_desc plugin_define_desc = {
 	.name = "PACKETSERVICE",
 	.priority = TCORE_PLUGIN_PRIORITY_MID + 1,
 	.version = 1,
