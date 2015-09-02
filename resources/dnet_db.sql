@@ -52,7 +52,9 @@ CREATE TABLE pdp_profile(
 	hidden               INTEGER,
 	editable             INTEGER,
 	default_internet_con INTEGER,
-	user_defined         INTEGER
+	user_defined         INTEGER,
+	is_roaming_apn	     INTEGER,
+	profile_enable       INTEGER
 	);
 
 DROP TABLE IF EXISTS "svc_category";

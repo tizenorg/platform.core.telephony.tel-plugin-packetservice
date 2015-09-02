@@ -1,5 +1,5 @@
 /*
- * PacketService Control Module
+ * tel-plugin-packetservice
  *
  * Copyright (c) 2012 Samsung Electronics Co., Ltd. All rights reserved.
  *
@@ -20,7 +20,7 @@
  *
  */
 
-#include "ps.h"
+#include "ps_common.h"
 #include "generated-code.h"
 
 #include <server.h>
@@ -190,33 +190,27 @@ static void __ps_modem_create_service(GDBusConnection *conn, TcorePlugin *p,
 	gchar *t_path = NULL;
 	GObject *object = NULL;
 
-	GSList *co_pslist = NULL;
-	GSList *co_networks = NULL;
 	CoreObject *co_ps = NULL;
 	CoreObject *co_network = NULL;
 	TcorePlugin *target_plg = NULL;
 
 	target_plg = tcore_object_ref_plugin(co_modem);
-	co_pslist = tcore_plugin_get_core_objects_bytype(target_plg, CORE_OBJECT_TYPE_PS);
-	if (!co_pslist)
-		return;
-	co_ps = co_pslist->data;
-	g_slist_free(co_pslist);
-
-	co_networks = tcore_plugin_get_core_objects_bytype(target_plg, CORE_OBJECT_TYPE_NETWORK);
-	if (!co_networks)
-		return;
-	co_network = co_networks->data;
-	g_slist_free(co_networks);
-
+	co_ps = tcore_plugin_ref_core_object(target_plg, CORE_OBJECT_TYPE_PS);
+	co_network = tcore_plugin_ref_core_object(target_plg, CORE_OBJECT_TYPE_NETWORK);
 	if (!co_ps || !co_network)
 		return;
 
 	t_path = g_strdup_printf("%s/%s", _ps_modem_ref_path(modem), "umts_ps");
+	if (NULL != g_hash_table_lookup(((ps_modem_t *) modem)->services, t_path)) {
+		ps_dbg_ex_co(co_modem, "service (%s) already exist!!!", t_path);
+		g_free(t_path);
+		return;
+	}
 	ps_dbg_ex_co(co_modem, "service path (%s)", t_path);
 	object = _ps_service_create_service(conn, p, modem, co_network, co_ps, t_path);
 	if (object == NULL) {
-		err("Failed to create service ");
+		ps_err_ex_co(co_modem, "Failed to create service ");
+		g_free(t_path);
 		return;
 	}
 
@@ -225,7 +219,6 @@ static void __ps_modem_create_service(GDBusConnection *conn, TcorePlugin *p,
 	__ps_modem_emit_service_added_signal((ps_modem_t *) modem, object);
 
 	g_free(t_path);
-
 	return;
 }
 
@@ -414,7 +407,6 @@ gpointer _ps_modem_create_modem(GDBusConnection *conn, TcorePlugin *p, gpointer 
 	new_modem->cp_name = g_strdup(cp_name);
 	new_modem->if_obj = modem;
 	new_modem->services = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, __remove_service_handler);
-	new_modem->contexts = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 
 	__ps_modem_get_ps_setting_from_storage(new_modem);
 	_ps_hook_co_modem_event(new_modem);
@@ -503,6 +495,7 @@ void _ps_modem_destroy_modem(GDBusConnection *conn, gpointer object)
 		__ps_modem_remove_service(modem, list_iter->data);
 	}
 	g_slist_free(list);
+	g_slist_free(modem->contexts);
 
 	/* Clear modem hooks */
 	_ps_free_co_modem_event(modem);
@@ -554,33 +547,24 @@ gboolean _ps_modem_processing_power_enable(gpointer object, int modem_state)
 
 	g_return_val_if_fail(modem != NULL, FALSE);
 
-	dbg("modem->powered [%d], Modem->sim_init [%d], Modem->reset_profile [%d], modem_state [%d]",
-		modem->powered, modem->sim_init, modem->reset_profile, modem_state);
+	dbg("modem->powered [%d], Modem->sim_init [%d], modem_state [%d]",
+		modem->powered, modem->sim_init, modem_state);
 
-	if (modem->sim_init  && (modem->powered == modem_state) && !modem->reset_profile)
+	if (modem->powered == modem_state)
 		return TRUE;
 
 	__ps_modem_set_powered(modem, modem_state);
 
 	if (modem_state == PS_MODEM_STATE_ONLINE) {
-		if (!modem->initial_bootup) {
-			dbg("initial bootup");
-			modem->initial_bootup = TRUE;
-		} else {
-			return TRUE;
-		}
-
 		__ps_modem_create_service(modem->conn, modem->plg, modem, modem->co_modem);
-		/* Populate Profile for operator as it was removed by fligh mode operation  */
-
 		if (modem->sim_init == TRUE && modem->operator != NULL) {
-			GHashTable *contexts = _ps_context_ref_hashtable(modem);;
+			GSList *contexts = (GSList*)_ps_modem_ref_contexts(modem);
 
 			if (contexts != NULL) {
 				GHashTableIter iter;
 				gpointer key, value;
+				warn("[WARN] contexts exist, SIM init complete before Modem Power On event.");
 				g_hash_table_iter_init(&iter, modem->services);
-
 				while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 					_ps_service_set_number_of_pdn_cnt(value, modem->operator);
 					_ps_service_ref_contexts(value, contexts, modem->operator);
@@ -589,10 +573,8 @@ gboolean _ps_modem_processing_power_enable(gpointer object, int modem_state)
 			}
 		}
 	} else if (modem_state == PS_MODEM_STATE_OFFLINE) {
-		modem->initial_bootup = FALSE;
 		__ps_modem_processing_modem_event(modem);
 		/* SIM init should be set to FALSE during CP silent reset.
-		 * MODEM_STATE_RESET -> PS_MODEM_STATE_OFFLINE.
 		 * and will be updated when SIM initialized complete notification is received.
 		 */
 	}
@@ -642,16 +624,15 @@ gboolean _ps_modem_processing_sim_complete(gpointer object, gboolean complete, g
 		 * Create context if -
 		 *	SIM is initiatized
 		 * Initialzed SIM is different (if same SIM is re-initialized then need not create context)
-		 * or Reset profile Operator is non-null
 		 * Delete context if sim_init = FALSE;
 		 * This will be coming when SIM power off or CARD error is received.
 		 */
 		if (modem->sim_init == TRUE) {
 			if ((different_sim || modem->reset_profile) && (modem->operator != NULL)) {
-				GHashTable *contexts;
+				GSList *contexts;
 
 				ps_dbg_ex_co(co_modem, "Creating Hash table...");
-				contexts = _ps_context_create_hashtable(object);
+				contexts = _ps_context_create_hashtable(object, modem->roaming);
 				if (contexts != NULL) {
 					GHashTableIter iter;
 					gpointer key, value;
@@ -660,7 +641,6 @@ gboolean _ps_modem_processing_sim_complete(gpointer object, gboolean complete, g
 					while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 						_ps_service_set_number_of_pdn_cnt(value, modem->operator);
 						_ps_service_ref_contexts(value, contexts, modem->operator);
-						/* Define Attach APN after context creation is complete */
 						_ps_service_set_attach_apn(value);
 					}
 				} else {
@@ -708,7 +688,6 @@ gboolean _ps_modem_get_reset_profile(gpointer object)
 
 	return modem->reset_profile;
 }
-
 
 GSource *_ps_modem_get_profile_reset_gsource(gpointer object)
 {
@@ -825,6 +804,24 @@ void _ps_modem_set_roaming(gpointer object, gboolean value)
 	ps_dbg_ex_co(_ps_modem_ref_co_modem(modem), "modem(%p) roaming(%d)", modem, modem->roaming);
 
 	return;
+}
+
+gint _ps_modem_get_roaming_apn_support(gpointer object)
+{
+	ps_modem_t *modem = object;
+
+	g_return_val_if_fail(modem != NULL, FALSE);
+
+	return modem->roaming_apn_support;
+}
+
+void _ps_modem_set_roaming_apn_support(gpointer object, gboolean value)
+{
+	ps_modem_t *modem = object;
+	g_return_if_fail(modem != NULL);
+
+	modem->roaming_apn_support = value;
+	ps_dbg_ex_co(_ps_modem_ref_co_modem(modem), "modem(%p) roaming_apn_support(%d)", modem, modem->roaming);
 }
 
 gint _ps_modem_get_psmode(gpointer object)
@@ -1026,6 +1023,13 @@ gchar *_ps_modem_ref_cp_name(gpointer object)
 	return modem->cp_name;
 }
 
+gpointer _ps_modem_ref_contexts(gpointer object)
+{
+	ps_modem_t *modem = object;
+	g_return_val_if_fail(modem != NULL, NULL);
+	return modem->contexts;
+}
+
 static gboolean on_modem_get_properties(PacketServiceModem *obj_modem,
 		GDBusMethodInvocation *invocation,
 		gpointer user_data)
@@ -1130,10 +1134,8 @@ static gboolean on_modem_get_profile_list(PacketServiceModem *obj_modem,
 		gpointer user_data)
 {
 	int profile_index = 0;
-	GHashTableIter iter;
-	gpointer key, value;
 
-	guint len = 0;
+	guint len = 0, index;
 	gchar **strv = NULL;
 	GSList *profiles = NULL;
 	ps_modem_t *modem = user_data;
@@ -1152,12 +1154,12 @@ static gboolean on_modem_get_profile_list(PacketServiceModem *obj_modem,
 		return TRUE;
 	}
 
-	g_hash_table_iter_init(&iter, modem->contexts);
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+	for (index = 0; index < g_slist_length(modem->contexts); index++) {
 		gchar *s_path = NULL;
+		gpointer value = g_slist_nth_data(modem->contexts, index);
 
 		s_path = _ps_context_ref_path(value);
-		ps_dbg_ex_co(co_modem, "key(%s), value(%p), path(%s)", (gchar *)key, value, s_path);
+		ps_dbg_ex_co(co_modem, "value(%p), path(%s)", value, s_path);
 		if (s_path)
 			profiles = g_slist_append(profiles, g_strdup((const char *)s_path));
 	}
@@ -1257,9 +1259,13 @@ gboolean _ps_modem_initiate_reset_profile(gpointer value)
 
 	co_modem = _ps_modem_ref_co_modem(modem);
 
-	_ps_modem_processing_power_enable(modem, PS_MODEM_STATE_OFFLINE);
 	ps_dbg_ex_co(co_modem, "Reseting the hash table");
-	_ps_context_reset_hashtable(modem);
+	/* Remove contexts through only service. */
+	g_hash_table_iter_init(&iter, modem->services);
+	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+		ps_dbg_ex_co(co_modem, "Remove contexts on service(%p)", value);
+		_ps_service_remove_contexts(value);
+	}
 
 	if (modem->type == 0) {
 		GThread *thread;
@@ -1277,7 +1283,7 @@ gboolean _ps_modem_initiate_reset_profile(gpointer value)
 
 		return FALSE;
 	}
-
+	/* Create contexts again. */
 	_ps_get_co_modem_values(modem);
 	_ps_modem_set_reset_profile(modem, FALSE);
 	packet_service_modem_complete_reset_profile(modem->if_obj, modem->invocation, TRUE);
@@ -1293,7 +1299,6 @@ gboolean _ps_modem_initiate_reset_profile(gpointer value)
 	}
 
 	ps_dbg_ex_co(co_modem, "Exiting");
-
 	return FALSE;
 }
 

@@ -1,5 +1,5 @@
 /*
- * PacketService Control Module
+ * tel-plugin-packetservice
  *
  * Copyright (c) 2012 Samsung Electronics Co., Ltd. All rights reserved.
  *
@@ -18,8 +18,8 @@
  * limitations under the License.
  *
  */
-#ifndef __PS_H__
-#define __PS_H__
+#ifndef __PS_COMMON_H__
+#define __PS_COMMON_H__
 
 #define PS_DBUS_SERVICE	"com.tcore.ps"
 
@@ -104,10 +104,11 @@
 #define INT2STRING(a)	g_strdup_printf("%d", a)
 
 /* Tizen Power saving mode */
-#define POWER_SAVING_MODE_NORMAL   0
-#define POWER_SAVING_MODE_POWERFUL 1
-#define POWER_SAVING_MODE_EMERGENCY 2
-#define POWER_SAVING_MODE_WEARABLE 3
+#define POWER_SAVING_MODE_NORMAL   0x00
+#define POWER_SAVING_MODE_POWERFUL 0x01
+#define POWER_SAVING_MODE_EMERGENCY 0x02
+#define POWER_SAVING_MODE_WEARABLE 0x03
+#define POWER_SAVING_MODE_FMM 0x10
 
 /*Tizen CDMA dummy Profile Index*/
 #define PS_CDMA_DUMMY_PROFILE_IDX 0
@@ -185,14 +186,14 @@ typedef struct packet_service_modem {
 	/* Value from modem */
 	gchar* operator;
 	int powered;
-	gboolean initial_bootup;
-	gboolean reset_profile;
 	gboolean sim_init;
+	gboolean reset_profile;
 	gboolean flight_mode;
 	gboolean flight_mode_ups; /*CP state right before UPS*/
 
 	gboolean roaming_allowed;
 	gboolean roaming;
+	gboolean roaming_apn_support;
 
 	gboolean data_allowed;
 	gint ps_mode;
@@ -201,7 +202,7 @@ typedef struct packet_service_modem {
 	GQueue *work_queue;
 	gchar *cp_name;
 	GHashTable *services;
-	GHashTable *contexts;
+	GSList *contexts;
 	GSource *reset_profile_gsource;
 } ps_modem_t;
 
@@ -226,7 +227,7 @@ typedef struct packet_service_service {
 	alarm_id_t timer_src;
 	guint connection_timeout;
 
-	GHashTable *contexts;
+	GSList *contexts;
 } ps_service_t;
 
 typedef struct packet_service_context {
@@ -240,9 +241,11 @@ typedef struct packet_service_context {
 #ifdef PREPAID_SIM_APN_SUPPORT
 	gboolean prepaid_alwayson;
 #endif
-	gboolean default_internet;
+	gboolean is_default;
 	gboolean hidden;
 	gboolean editable;
+	gboolean profile_enable;
+
 	gboolean ps_defined;
 	gboolean b_active;
 	gboolean b_notify; // for exception handling in UPS mode.
@@ -253,7 +256,6 @@ typedef struct packet_service_context {
 
 	gpointer async_context;
 	gpointer user_data;
-	gboolean delete_required;
 	gboolean deact_required;
 } ps_context_t;
 
@@ -291,6 +293,8 @@ gboolean    _ps_modem_get_roaming(gpointer object);
 void        _ps_modem_set_roaming(gpointer object, gboolean value);
 gboolean    _ps_modem_set_psmode(gpointer modem, gint value);
 gint		_ps_modem_get_psmode(gpointer modem);
+gint 		_ps_modem_get_roaming_apn_support(gpointer object);
+void 		_ps_modem_set_roaming_apn_support(gpointer object, gboolean value);
 guchar		_ps_modem_get_hook_flag(gpointer modem);
 gboolean    _ps_modem_get_flght_mode(gpointer object);
 void 		_ps_modem_set_flght_mode_ups(gpointer object, gboolean value);
@@ -307,6 +311,7 @@ gpointer    _ps_modem_ref_dbusconn(gpointer modem);
 gpointer    _ps_modem_ref_co_modem(gpointer modem);
 gpointer	_ps_modem_ref_work_queue(gpointer modem);
 gchar*		_ps_modem_ref_cp_name(gpointer modem);
+gpointer 	_ps_modem_ref_contexts(gpointer modem);
 ps_subs_type _ps_modem_get_subs_type(gpointer modem);
 gboolean _ps_modem_initiate_reset_profile(gpointer modem);
 
@@ -315,8 +320,8 @@ void 		__remove_service_handler(gpointer service);
 gpointer    _ps_service_create_service(GDBusConnection *conn, TcorePlugin *p,
 				gpointer modem, CoreObject *co_network, CoreObject *co_ps, gchar* path);
 gboolean    _ps_service_ref_context(gpointer object, gpointer context);
-gboolean    _ps_service_ref_contexts(gpointer service, GHashTable *contexts, gchar *operator);
-gboolean    _ps_service_unref_context(gpointer service, gpointer context);
+gboolean    _ps_service_ref_contexts(gpointer service, GSList *contexts, gchar *operator);
+gboolean 	_ps_service_unref_context(gpointer object, gpointer context);
 gboolean	_ps_service_get_properties_handler(gpointer object, GVariantBuilder *properties);
 GVariant*	_ps_service_get_properties(gpointer object, GVariantBuilder *properties);
 gchar*      _ps_service_ref_path(gpointer service);
@@ -356,7 +361,7 @@ gboolean    _ps_service_set_access_technology(gpointer service,
 				enum telephony_network_access_technology value);
 enum telephony_ps_state
 			_ps_service_check_cellular_state(gpointer object);
-int 		_ps_service_update_roaming_apn(gpointer object, const char* apn_str);
+int 		_ps_service_update_roaming_apn(gpointer object);
 void		_ps_service_set_attach_apn(ps_service_t *service);
 
 /*CONTEXT*/
@@ -365,8 +370,7 @@ gboolean    _ps_context_initialize(gpointer plugin);
 gboolean    _ps_context_reset_profile_table(gchar *cp_name);
 gboolean    _ps_context_fill_profile_table_from_ini_file(gchar *cp_name);
 gboolean    _ps_context_reset_hashtable(gpointer modem);
-GHashTable* _ps_context_create_hashtable(gpointer modem);
-GHashTable* _ps_context_ref_hashtable(gpointer modem);
+GSList* 	_ps_context_create_hashtable(gpointer modem, gboolean roaming);
 gboolean    _ps_context_add_context(gpointer modem, gchar *operator, GHashTable *property);
 gboolean	_ps_context_get_properties_handler(gpointer context, GVariantBuilder *properties);
 GVariant*	_ps_context_get_properties(gpointer context, GVariantBuilder *properties);
@@ -380,8 +384,10 @@ int         _ps_context_get_profile_id(gpointer object);
 gchar*      _ps_context_ref_path(gpointer context);
 gpointer    _ps_context_ref_co_context(gpointer context);
 gboolean    _ps_context_set_connected(gpointer context, gboolean enabled);
-gboolean 	_ps_context_set_ps_defined(gpointer *object, gboolean value);
-gboolean 	_ps_context_get_ps_defined(gpointer *object);
+gboolean 	_ps_context_set_profile_enable(gpointer object, gboolean value);
+gboolean 	_ps_context_get_profile_enable(gpointer object);
+gboolean 	_ps_context_set_ps_defined(gpointer object, gboolean value);
+gboolean 	_ps_context_get_ps_defined(gpointer object);
 gboolean    _ps_context_set_alwayson_enable(gpointer object, gboolean enabled);
 gboolean    _ps_context_get_default_context(gpointer object, int svc_cat_id);
 gboolean    _ps_context_remove_context(gpointer context);
@@ -394,6 +400,7 @@ gint        _ps_context_get_number_of_pdn(gchar *operator, gchar *cp_name);
 gboolean 	_ps_context_handle_ifaceup(gpointer user_data);
 gboolean 	_ps_context_handle_ifacedown(gpointer user_data);
 gboolean 	_ps_context_set_bearer_info(gpointer object, struct tnoti_ps_dedicated_bearer_info *bearer_info);
+gboolean 	_ps_context_check_is_roaming_apn_support(gchar* mccmnc, gchar* cp_name);
 
 /*PLUGIN INTERFACE*/
 void        _ps_get_network_mode(gpointer data);
@@ -437,4 +444,4 @@ int  ps_util_system_command(char * command);
 void ps_util_load_xml_file(const char *docname, const char *groupname, void **i_doc, void **i_root_node);
 void ps_util_unload_xml_file(void **i_doc, void **i_root_node);
 
-#endif /* __PS_H__ */
+#endif /* __PS_COMMON_H__ */

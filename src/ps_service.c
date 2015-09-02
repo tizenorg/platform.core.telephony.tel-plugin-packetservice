@@ -1,5 +1,5 @@
 /*
- * PacketService Control Module
+ * tel-plugin-packetservice
  *
  * Copyright (c) 2012 Samsung Electronics Co., Ltd. All rights reserved.
  *
@@ -20,7 +20,7 @@
  *
  */
 
-#include "ps.h"
+#include "ps_common.h"
 #include "generated-code.h"
 
 #include <core_object.h>
@@ -55,7 +55,7 @@ void __remove_service_handler(gpointer data)
 	}
 
 	/*Need to remove the compelete hash table*/
-	g_hash_table_remove_all(service->contexts);
+	g_slist_free(service->contexts);
 
 	/*Need to UNexport and Unref the master Object */
 	if (service->if_obj) {
@@ -154,8 +154,14 @@ static gboolean __ps_service_check_connection_option(gpointer object, gpointer c
 
 	ps_service_t *service = object;
 	ps_modem_t *modem = _ps_service_ref_modem(service);
-	CoreObject *co_context = context;
+	ps_context_t *ps_context = context;
+	CoreObject *co_context = (CoreObject *)_ps_context_ref_co_context(context);
 	CoreObject *co_network = _ps_service_ref_co_network(service);
+
+	if (TRUE != _ps_context_get_profile_enable(ps_context)) {
+		ps_warn_ex_co(co_network, "Profile is disabled.");
+		return FALSE;
+	}
 
 	role = tcore_context_get_role(co_context);
 	if (service->roaming)
@@ -275,11 +281,10 @@ static int __ps_service_connetion_timeout_handler(alarm_id_t alarm_id, void *con
 
 void _ps_service_set_attach_apn(ps_service_t *service)
 {
-	GHashTableIter iter;
-	gpointer key, ps_context;
-
-	g_hash_table_iter_init(&iter, service->contexts);
-	while (g_hash_table_iter_next(&iter, &key, &ps_context) == TRUE) {
+	unsigned int index;
+	
+	for (index = 0; index < g_slist_length(service->contexts); index++) {
+		gpointer ps_context = g_slist_nth_data(service->contexts, index);
 		CoreObject *co_context = _ps_context_ref_co_context(ps_context);
 		gboolean attach_apn = tcore_context_get_attach_apn(co_context);
 		if (attach_apn) {
@@ -325,7 +330,6 @@ gpointer _ps_service_create_service(GDBusConnection *conn, TcorePlugin *p, gpoin
 	new_service->co_ps = co_ps;
 	new_service->path = g_strdup(path);
 	new_service->if_obj = service;
-	new_service->contexts = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 
 	/*exporting the interface object to the path mention for master*/
 	if (TRUE != g_dbus_interface_skeleton_export((G_DBUS_INTERFACE_SKELETON(service)), conn, path, &error)) {
@@ -354,7 +358,6 @@ FAILURE:
 gboolean _ps_service_ref_context(gpointer object, gpointer context)
 {
 	gpointer tmp = NULL;
-	gchar *s_path = NULL;
 	ps_service_t *service = object;
 	CoreObject *co_network = NULL;
 
@@ -362,8 +365,7 @@ gboolean _ps_service_ref_context(gpointer object, gpointer context)
 	g_return_val_if_fail(service != NULL, FALSE);
 
 	co_network = _ps_service_ref_co_network(service);
-	s_path = _ps_context_ref_path(context);
-	tmp = g_hash_table_lookup(service->contexts, s_path);
+	tmp = g_slist_find(service->contexts, context);
 	if (tmp != NULL) {
 		ps_dbg_ex_co(co_network, "context(%p) already existed", tmp);
 		return FALSE;
@@ -371,34 +373,30 @@ gboolean _ps_service_ref_context(gpointer object, gpointer context)
 
 	_ps_context_set_service(context, service);
 	tcore_ps_add_context(service->co_ps, (CoreObject *) _ps_context_ref_co_context(context));
-	g_hash_table_insert(service->contexts, g_strdup(s_path), context);
+	service->contexts = g_slist_append(service->contexts, context);
 
-	ps_dbg_ex_co(co_network, "context(%p) insert to hash", context);
+	ps_dbg_ex_co(co_network, "context(%p) insert to linked-list", context);
 	__ps_service_emit_context_added_signal(service, context);
 
 	return TRUE;
 }
 
-gboolean _ps_service_ref_contexts(gpointer object, GHashTable *contexts, gchar *operator)
+gboolean _ps_service_ref_contexts(gpointer object, GSList *contexts, gchar *operator)
 {
-	GHashTableIter iter;
-	gpointer key, value;
 	ps_service_t *service = object;
 	gboolean ret = TRUE;
 	int rv;
+	unsigned int index, count;
 	CoreObject *co_network = NULL;
-
-	dbg("service refer to contexts");
 	g_return_val_if_fail(service != NULL, FALSE);
-
+	count = g_slist_length(contexts);
+	ps_dbg_ex_co(co_network, "service refer to contexts: count(%d)", count);
 	co_network = _ps_service_ref_co_network(service);
-	g_hash_table_iter_init(&iter, contexts);
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
-		gchar *s_path = NULL;
-		gpointer tmp = NULL;
+	for (index = 0; index < count; index++) {
+		gpointer tmp = NULL, value = NULL;
 
-		s_path = _ps_context_ref_path(value);
-		tmp = g_hash_table_lookup(service->contexts, s_path);
+		value = g_slist_nth_data(contexts, index);
+		tmp = g_slist_find(service->contexts, value);
 		if (tmp != NULL) {
 			ps_dbg_ex_co(co_network, "context(%p) already existed", tmp);
 			continue;
@@ -406,9 +404,9 @@ gboolean _ps_service_ref_contexts(gpointer object, GHashTable *contexts, gchar *
 
 		_ps_context_set_service(value, service);
 		tcore_ps_add_context(service->co_ps, (CoreObject *) _ps_context_ref_co_context(value));
-		g_hash_table_insert(service->contexts, g_strdup(s_path), value);
+		service->contexts = g_slist_append(service->contexts, value);
 
-		ps_dbg_ex_co(co_network, "context(%p) insert to hash", value);
+		ps_dbg_ex_co(co_network, "context(%p) path(%s) insert to linked-list", value, _ps_context_ref_path(value));
 		__ps_service_emit_context_added_signal(service, value);
 
 #ifdef PREPAID_SIM_APN_SUPPORT
@@ -428,25 +426,9 @@ gboolean _ps_service_ref_contexts(gpointer object, GHashTable *contexts, gchar *
 			}
 		}
 	}
-
+	ps_dbg_ex_co(co_network, "service->contexts: count(%d)", g_slist_length(service->contexts));
 	_ps_update_cellular_state_key(service);
 	return ret;
-}
-
-gboolean _ps_service_unref_context(gpointer object, gpointer context)
-{
-	ps_service_t *service = object;
-
-	dbg("service unref contexts");
-	g_return_val_if_fail(service != NULL, FALSE);
-	g_return_val_if_fail(context != NULL, FALSE);
-
-	ps_dbg_ex_co(_ps_service_ref_co_network(service), "remove context(%p) from service(%p)", context, service);
-	tcore_ps_remove_context(service->co_ps, (CoreObject *) _ps_context_ref_co_context(context));
-	g_hash_table_remove(service->contexts, _ps_context_ref_path(context));
-	__ps_service_emit_context_removed_signal(service, context);
-
-	return TRUE;
 }
 
 gboolean _ps_service_get_properties_handler(gpointer object, GVariantBuilder *properties)
@@ -610,17 +592,16 @@ gboolean _ps_service_set_context_bearerinfo(gpointer object, struct tnoti_ps_ded
 	}
 
 	while (contexts) {
-		GHashTableIter iter;
-		gpointer key, value;
-
+		unsigned int index;
+		
 		co_context = contexts->data;
 		if (!co_context) {
 			contexts = contexts->next;
 			continue;
 		}
 
-		g_hash_table_iter_init(&iter, service->contexts);
-		while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+		for (index = 0; index < g_slist_length(service->contexts); index++) {
+			gpointer value = g_slist_nth_data(service->contexts, index);
 			if (co_context == _ps_context_ref_co_context(value)) {
 				_ps_context_set_bearer_info(value, bearer_info);
 				break;
@@ -642,9 +623,7 @@ int _ps_service_define_context(gpointer object, gpointer context)
 	dbg("define context(%p)", context);
 	g_return_val_if_fail(service != NULL, FALSE);
 
-	co_context = (CoreObject *)_ps_context_ref_co_context(context);
-
-	b_connect = __ps_service_check_connection_option(service, co_context);
+	b_connect = __ps_service_check_connection_option(service, context);
 	if (!b_connect)
 		return TCORE_RETURN_EPERM;
 
@@ -674,6 +653,7 @@ int _ps_service_activate_context(gpointer object, gpointer context)
 	co_network = _ps_service_ref_co_network(service);
 	modem = _ps_service_ref_modem(service);
 	ps_defined = _ps_context_get_ps_defined(context);
+	co_context = (CoreObject *)_ps_context_ref_co_context(context);
 	if (modem->hook_flag != PS_NO_PENDING_REQUEST) {
 		ps_dbg_ex_co(co_network, "Pending request present in queue with flag %x", modem->hook_flag);
 		ret = TCORE_RETURN_FAILURE;
@@ -689,13 +669,11 @@ int _ps_service_activate_context(gpointer object, gpointer context)
 		goto EXIT;
 	}
 
-	co_context = (CoreObject *)_ps_context_ref_co_context(context);
-	b_connect = __ps_service_check_connection_option(service, co_context);
+	b_connect = __ps_service_check_connection_option(service, context);
 	if (!b_connect) {
 		ret = TCORE_RETURN_EPERM;
 		goto EXIT;
 	}
-
 
 	if (!ps_defined) {
 		ps_dbg_ex_co(co_network, "pdp profile is not defined yet, define first. ");
@@ -707,9 +685,18 @@ int _ps_service_activate_context(gpointer object, gpointer context)
 EXIT:
 	if (ret != TCORE_RETURN_SUCCESS) {
 		if (ps_defined) {
-			ps_warn_ex_co(co_network, "fail to activate context after PDP define complete, clear resources.");
-			_ps_context_set_ps_defined(context, FALSE);
-			tcore_ps_clear_context_id(service->co_ps, co_context);
+			/*
+			 * CONTEXT_STATE_ACTIVATING : Never be happen.
+			 * CONTEXT_STATE_ACTIVATED : Never be happen.
+			 * CONTEXT_STATE_DEACTIVATING: Do not clear resources.
+			 */
+			if (CONTEXT_STATE_DEACTIVATED == tcore_context_get_state(co_context)) {
+				ps_warn_ex_co(co_network, "fail to activate context after PDP define complete, clear resources.");
+				_ps_context_set_ps_defined(context, FALSE);
+				tcore_ps_clear_context_id(service->co_ps, co_context);
+			} else {
+				ps_err_ex_co(co_network, "invalid context state.");
+			}
 		}
 	}
 	return ret;
@@ -801,48 +788,57 @@ void _ps_service_reset_connection_timer(gpointer context)
 	return;
 }
 
+gboolean _ps_service_unref_context(gpointer object, gpointer context)
+{
+	ps_service_t *service = object;
+	ps_modem_t *modem = _ps_service_ref_modem(service);
+	ps_context_t *pscontext = context;
+
+	g_return_val_if_fail(service != NULL, FALSE);
+	g_return_val_if_fail(modem != NULL, FALSE);
+	g_return_val_if_fail(context != NULL, FALSE);
+	g_return_val_if_fail(pscontext->path != NULL, FALSE);
+	dbg("service unref context (%s)", pscontext->path);
+	
+	_ps_service_deactivate_context(service, context);
+	/* remove context from the list (modem, service) */
+	modem->contexts = g_slist_remove(modem->contexts, pscontext);
+	__ps_service_emit_context_removed_signal(service, pscontext);
+	return TRUE;
+}
+
 void _ps_service_remove_contexts(gpointer object)
 {
-	GHashTableIter iter;
-	gpointer key, value;
+	unsigned int index;
 	ps_service_t *service = object;
+	guint count;
 
-	dbg("service remove all contexts");
 	g_return_if_fail(service != NULL);
+	count = g_slist_length(service->contexts);
+	ps_dbg_ex_co(_ps_service_ref_co_network(service), "service remove all contexts: count(%d)", count);
 
-	g_hash_table_iter_init(&iter, service->contexts);
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
-		gpointer co_context = NULL;
-
-		ps_dbg_ex_co(_ps_service_ref_co_network(service), "key(%s), value(%p) context", key, value);
-		co_context = _ps_context_ref_co_context(value);
-
-		_ps_service_reset_connection_timer(value);
-		_ps_context_set_alwayson_enable(value, FALSE);
-		_ps_service_deactivate_context(service, value);
-		_ps_context_set_connected(value, FALSE);
-		tcore_ps_remove_context(service->co_ps, co_context);
-		tcore_context_free(co_context);
-
-		__ps_service_emit_context_removed_signal(service, value);
+	for (index = 0; index < count; index++) {
+		gpointer value = NULL;
+		value = g_slist_nth_data(service->contexts, index);
+		ps_dbg_ex_co(_ps_service_ref_co_network(service), "path(%s), value(%p) context", _ps_context_ref_path(value), value);
+		_ps_service_unref_context(service, value);
 		_ps_context_remove_context(value);
 	}
-
-	g_hash_table_remove_all(service->contexts);
+	g_slist_free(service->contexts);
+	service->contexts = NULL;
 	return;
 }
 
 void _ps_service_disconnect_contexts(gpointer object)
 {
-	GHashTableIter iter;
-	gpointer key, value;
+	unsigned int index;
 	ps_service_t *service = object;
 
 	dbg("service disconnect all contexts");
 	g_return_if_fail(service != NULL);
 
-	g_hash_table_iter_init(&iter, service->contexts);
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+	for (index = 0; index < g_slist_length(service->contexts); index++) {
+		gpointer value = g_slist_nth_data(service->contexts, index);
 		_ps_service_reset_connection_timer(value);
 		_ps_service_deactivate_context(service, value);
 	}
@@ -852,8 +848,7 @@ void _ps_service_disconnect_contexts(gpointer object)
 
 void _ps_service_disconnect_internet_mms_contexts(gpointer object)
 {
-	GHashTableIter iter;
-	gpointer key, value;
+	unsigned int index;
 	ps_service_t *service = object;
 	CoreObject *co_context = NULL;
 	enum co_context_role role = CONTEXT_ROLE_UNKNOWN;
@@ -861,8 +856,8 @@ void _ps_service_disconnect_internet_mms_contexts(gpointer object)
 	dbg("Service disconnect Internet/MMS contexts");
 	g_return_if_fail(service != NULL);
 
-	g_hash_table_iter_init(&iter, service->contexts);
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+	for (index = 0; index < g_slist_length(service->contexts); index++) {
+		gpointer value = g_slist_nth_data(service->contexts, index);
 		co_context = (CoreObject *)_ps_context_ref_co_context(value);
 		role = tcore_context_get_role(co_context);
 
@@ -963,24 +958,23 @@ gboolean _ps_service_connect_last_connected_context_ex(gpointer service, gpointe
 
 gboolean _ps_service_connect_last_connected_context(gpointer object)
 {
-	GHashTableIter iter;
-	gpointer key, value;
 	gboolean ret;
 	gboolean defined = FALSE;
 	ps_service_t *service = object;
 	gchar *operator = NULL;
+	unsigned int index;
 
 	dbg("Entry");
 
 	g_return_val_if_fail(service != NULL, TCORE_RETURN_FAILURE);
 	operator = _ps_modem_ref_operator(_ps_service_ref_modem(service));
 
-	g_hash_table_iter_init(&iter, service->contexts);
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
-		ret = _ps_service_connect_last_connected_context_ex(service, value, &defined, operator);
+	for (index = 0; index < g_slist_length(service->contexts); index++) {
+		gpointer ps_context = g_slist_nth_data(service->contexts, index);
+		ret = _ps_service_connect_last_connected_context_ex(service, ps_context, &defined, operator);
 		dbg("ret[%d]", ret);
 		if (defined == TRUE) {
-			dbg("context[%p]", value);
+			dbg("context[%p]", ps_context);
 			return defined;
 		}
 	}
@@ -991,15 +985,14 @@ gboolean _ps_service_connect_last_connected_context(gpointer object)
 int _ps_service_connect_default_context(gpointer object)
 {
 	int rv = 0;
-	GHashTableIter iter;
-	gpointer key, value;
+	unsigned int index;
 	ps_service_t *service = object;
 
 	dbg("service connect default context");
 	g_return_val_if_fail(service != NULL, TCORE_RETURN_FAILURE);
 
-	g_hash_table_iter_init(&iter, service->contexts);
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+	for (index = 0; index < g_slist_length(service->contexts); index++) {
+		gpointer value = g_slist_nth_data(service->contexts, index);
 		gboolean f_awo = FALSE;
 		f_awo = _ps_context_get_alwayson_enable(value);
 
@@ -1019,20 +1012,19 @@ int _ps_service_connect_default_context(gpointer object)
 int _ps_service_connect_default_prepaid_context(gpointer object)
 {
 	int rv = 0;
-	GHashTableIter iter;
-	gpointer key, value;
 	ps_service_t *service = object;
+	unsigned int index;
 	dbg("Entry");
 
 	g_return_val_if_fail(service != NULL, TCORE_RETURN_FAILURE);
 
-	g_hash_table_iter_init(&iter, service->contexts);
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+	for (index = 0; index < g_slist_length(service->contexts); index++) {
+		gpointer ps_context = g_slist_nth_data(service->contexts, index);
 		gboolean f_awo = FALSE;
-		f_awo = _ps_context_get_prepaid_alwayson_enable(value);
+		f_awo = _ps_context_get_prepaid_alwayson_enable(ps_context);
 		if (f_awo) {
-			_ps_service_reset_connection_timer(value);
-			rv = _ps_service_activate_context(service, value);
+			_ps_service_reset_connection_timer(ps_context);
+			rv = _ps_service_activate_context(service, ps_context);
 			dbg("return rv(%d)", rv);
 			break;
 		}
@@ -1043,24 +1035,23 @@ int _ps_service_connect_default_prepaid_context(gpointer object)
 
 gpointer _ps_service_return_context_by_cid(gpointer object, int context_id)
 {
-	GHashTableIter iter;
-	gpointer key, value;
 	ps_service_t *service = object;
+	unsigned int index;
 
 	g_return_val_if_fail(service != NULL, NULL);
 
-	g_hash_table_iter_init(&iter, service->contexts);
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+	for (index = 0; index < g_slist_length(service->contexts); index++) {
+		gpointer ps_context = g_slist_nth_data(service->contexts, index);
 		int tmp_cid;
-		CoreObject *context = NULL;
+		CoreObject *co_context = NULL;
 
-		context = _ps_context_ref_co_context(value);
-		tmp_cid = tcore_context_get_id(context);
+		co_context = _ps_context_ref_co_context(ps_context);
+		tmp_cid = tcore_context_get_id(co_context);
 
 		if (tmp_cid != context_id)
 			continue;
 
-		return value;
+		return ps_context;
 	}
 	return NULL;
 }
@@ -1068,14 +1059,13 @@ gpointer _ps_service_return_context_by_cid(gpointer object, int context_id)
 
 gpointer _ps_service_return_default_context(gpointer object, int svc_cat_id)
 {
-	GHashTableIter iter;
-	gpointer key, value;
+	unsigned int index;
 	ps_service_t *service = object;
 
 	g_return_val_if_fail(service != NULL, NULL);
 
-	g_hash_table_iter_init(&iter, service->contexts);
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+	for (index = 0; index < g_slist_length(service->contexts); index++) {
+		gpointer value = g_slist_nth_data(service->contexts, index);
 		gboolean b_default = FALSE;
 		b_default = _ps_context_get_default_context(value, svc_cat_id);
 
@@ -1086,32 +1076,34 @@ gpointer _ps_service_return_default_context(gpointer object, int svc_cat_id)
 	return NULL;
 }
 
-int _ps_service_update_roaming_apn(gpointer object, const char *apn_str)
+int _ps_service_update_roaming_apn(gpointer object)
 {
 	int rv = 0;
-	GHashTableIter iter;
-	gpointer key, value;
 	ps_service_t *service = object;
+	ps_modem_t *modem = _ps_service_ref_modem(object);
+	gboolean p_from = FALSE; /* default <FLASE> : Home newtwork */
+	GSList *contexts = NULL;
 
 	g_return_val_if_fail(service != NULL, TCORE_RETURN_FAILURE);
+	g_return_val_if_fail(modem != NULL, TCORE_RETURN_FAILURE);
 
-	g_hash_table_iter_init(&iter, service->contexts);
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
-		CoreObject *co_context = NULL;
-		int role = CONTEXT_ROLE_UNKNOWN;
-		char *tmp_apn = NULL, *path = NULL;
+	dbg("roaming status: %d", service->roaming);
+	/* 1) Remove all contexts
+	 * 2) Load Home/Roaming profiles from database.
 
-		co_context = (CoreObject *)_ps_context_ref_co_context(value);
-		role = tcore_context_get_role(co_context);
-		tmp_apn = tcore_context_get_apn(co_context);
-		path = _ps_context_ref_path(value);
+	 * Home -> Roaming network:
+	 * 3-2) If Any roaming profile is not provided by service provider,
+	 *      load Home profiles from database.
+	 */
 
-		if (role == CONTEXT_ROLE_INTERNET || role == CONTEXT_ROLE_MMS) {
-			dbg("context[%s]}, role[%d], apn[%s] -> apn[%s]", path, role, tmp_apn, apn_str);
-			tcore_context_set_apn(co_context, apn_str);
-			tcore_ps_deactivate_context(service->co_ps, co_context, NULL);
+	p_from = _ps_modem_get_roaming_apn_support(modem);
+	if (p_from) {
+		_ps_service_remove_contexts(object);
+		contexts = _ps_context_create_hashtable((gpointer)modem, service->roaming);
+		if (contexts != NULL) {
+			rv = _ps_service_set_number_of_pdn_cnt(object, modem->operator);
+			rv = _ps_service_ref_contexts(object, contexts, modem->operator);
 		}
-		g_free(tmp_apn);
 	}
 	dbg("rv: %d", rv);
 	return rv;
@@ -1136,6 +1128,8 @@ gboolean _ps_service_processing_network_event(gpointer object, gboolean ps_attac
 	if (prev_roaming_status != _ps_service_get_roaming(service)) {
 		gboolean roaming_allowed = FALSE;
 		roaming_allowed = _ps_modem_get_data_roaming_allowed(service->p_modem);
+		_ps_service_update_roaming_apn(object);
+
 		if (!roaming_allowed && roaming) {
 			ps_dbg_ex_co(co_network, "Roaming allowed (%d), Roaming status (%d)", roaming_allowed, roaming);
 			_ps_service_disconnect_contexts(service);
@@ -1158,9 +1152,7 @@ gboolean _ps_service_processing_network_event(gpointer object, gboolean ps_attac
 
 gboolean _ps_service_set_connected(gpointer object, gpointer cstatus, gboolean enabled)
 {
-	GHashTableIter iter;
-	gpointer key, value;
-
+	unsigned int index;
 	gboolean def_awo = FALSE, b_def_conn = FALSE;
 	gpointer def_conn = NULL;
 	gpointer requested_conn = NULL;
@@ -1178,8 +1170,8 @@ gboolean _ps_service_set_connected(gpointer object, gpointer cstatus, gboolean e
 		service->initial_pdp_conn = TRUE;
 	}
 
-	g_hash_table_iter_init(&iter, service->contexts);
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+	for (index = 0; index < g_slist_length(service->contexts); index++) {
+		gpointer value = g_slist_nth_data(service->contexts, index);
 		int tmp_cid;
 		gboolean b_tmp_def = FALSE;
 		CoreObject *context = NULL;
@@ -1270,39 +1262,52 @@ gboolean _ps_service_set_connected(gpointer object, gpointer cstatus, gboolean e
 
 	}
 
+	/* To send deactivation request of default profile */
+	if (enabled && requested_conn) {
+		ps_dbg_ex_co(co_network, "Send deactivation to default profile and connect to request profile (%p)", requested_conn);
+		return FALSE;
+	}
+
 	return TRUE;
 }
 
 void _ps_service_set_ps_defined(gpointer *object, gboolean value, int cid)
 {
 	ps_service_t *service = (ps_service_t *)object;
-	GHashTableIter iter;
-	gpointer key, ps_context;
+	unsigned int index;
 	CoreObject *co_network;
 
 	g_return_if_fail(service != NULL);
 
 	co_network = _ps_service_ref_co_network(service);
-	g_hash_table_iter_init(&iter, service->contexts);
-	while (g_hash_table_iter_next(&iter, &key, &ps_context) == TRUE) {
+	for (index = 0; index < g_slist_length(service->contexts); index++) {
+		gpointer ps_context = g_slist_nth_data(service->contexts, index);
 		CoreObject *co_context = _ps_context_ref_co_context(ps_context);
 		unsigned char context_id = tcore_context_get_id(co_context);
 		if (context_id == cid) {
 			gboolean attach_apn = tcore_context_get_attach_apn(co_context);
+			gboolean proceed_activation = TRUE;
+
 			/* Check attach apn complete */
 			if (value && attach_apn && !service->attach_apn_complete) {
-				ps_dbg_ex_co(co_network, "Initial define of attach APN is complete for profile role(%d)",
-					tcore_context_get_role(co_context));
+				int role = tcore_context_get_role(co_context);
+				ps_dbg_ex_co(co_network, "Initial define of attach APN is complete for profile role(%d)", role);
 				service->attach_apn_complete = TRUE;
-				tcore_ps_clear_context_id(service->co_ps, co_context);
-				break;
+
+				if(TRUE == _ps_context_get_default_context(ps_context, CONTEXT_ROLE_INTERNET) && service->ps_attached)
+					proceed_activation = TRUE;
+				else {
+					proceed_activation = FALSE;
+					tcore_ps_clear_context_id(service->co_ps, co_context);
+				}
 			}
+			proceed_activation &= value;
 
 			/* Set 'ps_defined' */
-			_ps_context_set_ps_defined(ps_context, value);
+			_ps_context_set_ps_defined(ps_context, proceed_activation);
 
-			/* Activate if define is completed */
-			if (value) {
+			if (proceed_activation) {
+				/* Activate if define is completed */
 				ps_dbg_ex_co(co_network, "define is complete, activate context for cid(%d)", cid);
 				if (_ps_service_activate_context(service, ps_context) == TCORE_RETURN_SUCCESS) {
 					dbg("Successful activate context");
@@ -1511,8 +1516,7 @@ on_service_get_context(PacketServiceService *obj_service,
 	GVariantBuilder b_context;
 	GVariant *contexts;
 
-	GHashTableIter iter;
-	gpointer key, value;
+	unsigned int index;
 	ps_service_t *service = user_data;
 	CoreObject *co_network = _ps_service_ref_co_network(service);
 
@@ -1525,8 +1529,8 @@ on_service_get_context(PacketServiceService *obj_service,
 	}
 
 	g_variant_builder_init(&b_context, G_VARIANT_TYPE("a{sa{ss}}"));
-	g_hash_table_iter_init(&iter, service->contexts);
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+	for (index = 0; index < g_slist_length(service->contexts); index++) {
+		gpointer value = g_slist_nth_data(service->contexts, index);
 		gchar *path = NULL;
 		g_variant_builder_open(&b_context, G_VARIANT_TYPE("{sa{ss}}"));
 		path = _ps_service_ref_path(value);

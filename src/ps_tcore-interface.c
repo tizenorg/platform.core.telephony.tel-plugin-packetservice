@@ -1,5 +1,5 @@
 /*
- * PacketService Control Module
+ * tel-plugin-packetservice
  *
  * Copyright (c) 2012 Samsung Electronics Co., Ltd. All rights reserved.
  *
@@ -19,7 +19,7 @@
  *
  */
 
-#include "ps.h"
+#include "ps_common.h"
 
 #include <server.h>
 #include <plugin.h>
@@ -172,18 +172,12 @@ static gboolean __ps_set_network_mode(int mode, void *data)
 	UserRequest *ur = NULL;
 	ps_modem_t *modem = data;
 
-	GSList *co_list = NULL;
 	CoreObject *co_network = NULL;
-
-	co_list = tcore_plugin_get_core_objects_bytype(tcore_object_ref_plugin(modem->co_modem),
-			CORE_OBJECT_TYPE_NETWORK);
-
-	if (G_UNLIKELY(co_list == NULL))
-		return FALSE;
 
 	memset(&req, 0, sizeof(struct treq_network_set_mode));
 
-	co_network = (CoreObject *) co_list->data;
+	co_network = tcore_plugin_ref_core_object(tcore_object_ref_plugin(modem->co_modem),
+			CORE_OBJECT_TYPE_NETWORK);
 	c_mode = mode;
 	dbg("current network mode (%d)", c_mode);
 
@@ -203,7 +197,6 @@ static gboolean __ps_set_network_mode(int mode, void *data)
 	dbg("candidate mode(%d), current mode(%d)", c_mode, mode);
 	if (c_mode == mode) {
 		dbg("mode is the same as before, do not send");
-		g_slist_free(co_list);
 		return FALSE;
 	}
 
@@ -218,7 +211,6 @@ static gboolean __ps_set_network_mode(int mode, void *data)
 		tcore_user_request_unref(ur);
 	}
 
-	g_slist_free(co_list);
 	return TRUE;
 }
 
@@ -320,20 +312,11 @@ void __ps_hook_response_cb(UserRequest *ur, enum tcore_response_command command,
 	if (count != 0) {
 		ur = ps_util_pop_waiting_job(modem->work_queue, id);
 		if (ur) {
-			GSList *co_list = NULL;
 			CoreObject *co_network = NULL;
 			TReturn ret = TCORE_RETURN_SUCCESS;
 
-			co_list = tcore_plugin_get_core_objects_bytype(tcore_object_ref_plugin(modem->co_modem),
+			co_network = tcore_plugin_ref_core_object(tcore_object_ref_plugin(modem->co_modem),
 				CORE_OBJECT_TYPE_NETWORK);
-
-			if (G_UNLIKELY(co_list == NULL)) {
-				ps_err_ex_co(co_modem, "Network CoreObject is not present");
-				return;
-			}
-
-			co_network = (CoreObject *) co_list->data;
-			g_slist_free(co_list);
 
 			ps_dbg_ex_co(co_modem, "Sending Pending Request of type = id", id);
 			tcore_user_request_set_response_hook(ur, __ps_hook_response_cb, modem);
@@ -443,7 +426,8 @@ void __ps_modem_get_mode_pref_change(ps_modem_t *modem, UserRequest *ur)
 {
 	enum telephony_network_service_type svc_type;
 	enum tcore_request_command cmd;
-	GSList *co_list = NULL;
+	CoreObject *co_network = NULL;
+	const struct treq_network_set_mode *req;
 
 	cmd = tcore_user_request_get_command(ur);
 	if (cmd != TREQ_NETWORK_SET_MODE) {
@@ -453,41 +437,38 @@ void __ps_modem_get_mode_pref_change(ps_modem_t *modem, UserRequest *ur)
 	}
 	modem->mode_pref_changed = TRUE;
 
-	co_list = tcore_plugin_get_core_objects_bytype(tcore_object_ref_plugin(modem->co_modem), CORE_OBJECT_TYPE_NETWORK);
-	if (G_LIKELY(co_list != NULL)) {
-		CoreObject *co_network = NULL;
-		const struct treq_network_set_mode *req;
+	co_network = tcore_plugin_ref_core_object(tcore_object_ref_plugin(modem->co_modem),
+		CORE_OBJECT_TYPE_NETWORK);
+	req = tcore_user_request_ref_data(ur, NULL);
 
-		co_network = (CoreObject *) co_list->data;
-		req = tcore_user_request_ref_data(ur, NULL);
-		tcore_network_get_service_type(co_network, &svc_type);
-		dbg("mode_pref[0x%x], svc_type[%d]", req->mode, svc_type);
-		switch (svc_type) {
-		case NETWORK_SERVICE_TYPE_2G:
-		case NETWORK_SERVICE_TYPE_2_5G:
-		case NETWORK_SERVICE_TYPE_2_5G_EDGE: {
-			if (req->mode == NETWORK_MODE_GSM)
+	tcore_network_get_service_type(co_network, &svc_type);
+	dbg("mode_pref[0x%x], svc_type[%d]", req->mode, svc_type);
+	switch (svc_type) {
+	case NETWORK_SERVICE_TYPE_2G:
+	case NETWORK_SERVICE_TYPE_2_5G:
+	case NETWORK_SERVICE_TYPE_2_5G_EDGE: {
+		if (req->mode == NETWORK_MODE_GSM)
 			modem->mode_pref_changed = FALSE;
-			}
-		break;
-
-		case NETWORK_SERVICE_TYPE_3G:
-		case NETWORK_SERVICE_TYPE_HSDPA: {
-			if (req->mode & NETWORK_MODE_WCDMA)
-			modem->mode_pref_changed = FALSE;
-			}
-		break;
-
-		case NETWORK_SERVICE_TYPE_LTE: {
-			if (req->mode & NETWORK_MODE_LTE)
-			modem->mode_pref_changed = FALSE;
-			}
-		break;
-
-		default:
-		break;
-		}
 	}
+	break;
+
+	case NETWORK_SERVICE_TYPE_3G:
+	case NETWORK_SERVICE_TYPE_HSDPA: {
+		if (req->mode & NETWORK_MODE_WCDMA)
+			modem->mode_pref_changed = FALSE;
+	}
+	break;
+
+	case NETWORK_SERVICE_TYPE_LTE: {
+		if (req->mode & NETWORK_MODE_LTE)
+			modem->mode_pref_changed = FALSE;
+	}
+	break;
+
+	default:
+	break;
+	}
+
 	dbg("mode_pref_changed : %d", modem->mode_pref_changed);
 }
 
@@ -655,7 +636,6 @@ enum tcore_hook_return ps_handle_hook(Server *s, UserRequest *ur, void *user_dat
 	TReturn rv = TCORE_RETURN_FAILURE;
 
 	CoreObject *co_ps = NULL;
-	GSList *co_ps_list = NULL;
 	TcorePlugin *target_plg = NULL;
 	int value = 0;
 	guint job_cnt = 0;
@@ -678,15 +658,7 @@ enum tcore_hook_return ps_handle_hook(Server *s, UserRequest *ur, void *user_dat
 				tcore_server_get_cp_name_by_plugin(target_plg));
 
 		if (cmd == TREQ_NETWORK_SEARCH) {
-			co_ps_list = tcore_plugin_get_core_objects_bytype(target_plg, CORE_OBJECT_TYPE_PS);
-			if (!co_ps_list) {
-				ps_dbg_ex_co(co_modem, "No ps core object present ");
-				free(modem_name);
-				return TCORE_HOOK_RETURN_CONTINUE;
-			}
-			co_ps = co_ps_list->data;
-			g_slist_free(co_ps_list);
-
+			co_ps = tcore_plugin_ref_core_object(target_plg, CORE_OBJECT_TYPE_PS);
 			if (!co_ps) {
 				ps_dbg_ex_co(co_modem, "No ps core object present ");
 				free(modem_name);
@@ -725,13 +697,7 @@ enum tcore_hook_return ps_handle_hook(Server *s, UserRequest *ur, void *user_dat
 	if (modem_name)
 		free(modem_name);
 
-	co_ps_list = tcore_plugin_get_core_objects_bytype(target_plg, CORE_OBJECT_TYPE_PS);
-	if (!co_ps_list)
-		return TCORE_HOOK_RETURN_CONTINUE;
-
-	co_ps = co_ps_list->data;
-	g_slist_free(co_ps_list);
-
+	co_ps = tcore_plugin_ref_core_object(target_plg, CORE_OBJECT_TYPE_PS);
 	if (!co_ps)
 		return TCORE_HOOK_RETURN_CONTINUE;
 
@@ -926,28 +892,14 @@ enum tcore_hook_return ps_handle_hook(Server *s, UserRequest *ur, void *user_dat
 void __ps_send_pending_user_request(gpointer data)
 {
 	ps_modem_t *modem =  data;
-	GSList *co_list = NULL;
 	CoreObject *co_network = NULL;
 	CoreObject *co_sim = NULL;
 	gpointer *queue_data = NULL;
 
-	co_list = tcore_plugin_get_core_objects_bytype(tcore_object_ref_plugin(modem->co_modem),
+	co_network = tcore_plugin_ref_core_object(tcore_object_ref_plugin(modem->co_modem),
 			CORE_OBJECT_TYPE_NETWORK);
-
-	if (G_UNLIKELY(co_list == NULL))
-		return;
-
-	co_network = (CoreObject *) co_list->data;
-	g_slist_free(co_list);
-
-	co_list = tcore_plugin_get_core_objects_bytype(tcore_object_ref_plugin(modem->co_modem),
+	co_sim = tcore_plugin_ref_core_object(tcore_object_ref_plugin(modem->co_modem),
 			CORE_OBJECT_TYPE_SIM);
-
-	if (G_UNLIKELY(co_list == NULL))
-		return;
-
-	co_sim = (CoreObject *) co_list->data;
-	g_slist_free(co_list);
 
 	ps_dbg_ex_co(co_network, "Extracting the user request from the work queue");
 
@@ -1116,11 +1068,13 @@ static enum tcore_hook_return __on_hook_call_status(Server *s, CoreObject *sourc
 				return TCORE_HOOK_RETURN_CONTINUE;
 			}
 		} else {
-			_ps_service_set_connected(service, cstatus, TRUE);
+			gboolean ret = TRUE;
+
+			ret = _ps_service_set_connected(service, cstatus, TRUE);
 			tcore_ps_set_cid_connected(co_ps, cstatus->context_id, TRUE);
 
-			if (g_queue_get_length((GQueue *)_ps_modem_ref_work_queue(modem)) || (_ps_modem_get_reset_profile(modem) == TRUE)) {
-				ps_dbg_ex_co(co_network, "Special request present in queue ");
+			if (ret == FALSE || g_queue_get_length((GQueue *)_ps_modem_ref_work_queue(modem)) || (_ps_modem_get_reset_profile(modem) == TRUE)) {
+				ps_dbg_ex_co(co_network, "Special request present in queue or pending activation request");
 
 				rv = tcore_ps_deactivate_contexts(co_ps);
 				if (rv != TCORE_RETURN_SUCCESS) {
@@ -1478,7 +1432,6 @@ static enum tcore_hook_return __on_hook_powered(Server *s, CoreObject *source,
 
 	switch (modem_power->state) {
 	case MODEM_STATE_ONLINE:
-	case MODEM_STATE_RESUME:
 		power = PS_MODEM_STATE_ONLINE;
 	break;
 
@@ -1487,12 +1440,9 @@ static enum tcore_hook_return __on_hook_powered(Server *s, CoreObject *source,
 	break;
 
 	case MODEM_STATE_ERROR:
-	case MODEM_STATE_OFFLINE:
 	case MODEM_STATE_RESET:
 		/* Reset hook flag in any present */
 		__ps_modem_cp_reset_handler(modem);
-
-		power = PS_MODEM_STATE_OFFLINE;
 	break;
 
 	default:
@@ -1735,23 +1685,14 @@ static enum tcore_hook_return __on_hook_sim_init(Server *s, CoreObject *source,
 #ifdef POWER_SAVING_FEATURE_WEARABLE
 static gboolean __ps_is_any_call_in_progress(TcorePlugin *plugin, __ps_call_flow_type type, enum tcore_notification_command command)
 {
-	GSList *list = 0;
-	CoreObject *o = 0;
+	CoreObject *co_call = 0;
 	int total_call_cnt = 0;
 
 	gboolean call_in_progress = FALSE;
 
-	list = tcore_plugin_get_core_objects_bytype(plugin, CORE_OBJECT_TYPE_CALL);
-	if (!list) {
-		/* call_in_progress = FALSE; */
-		err("[ error ] co_list : 0");
-		return call_in_progress;
-	}
+	co_call = tcore_plugin_ref_core_object(plugin, CORE_OBJECT_TYPE_CALL);
 
-	o = (CoreObject *)list->data;
-	g_slist_free(list);
-
-	total_call_cnt = tcore_call_object_total_length(o);
+	total_call_cnt = tcore_call_object_total_length(co_call);
 	dbg("totall call cnt (%d)", total_call_cnt);
 
 	if (((type == ON_REQUEST || type == ON_NON_CALL_NOTI_HOOK) && total_call_cnt !=  0)
@@ -1838,18 +1779,12 @@ void _ps_get_network_mode(gpointer data)
 	UserRequest *ur = NULL;
 	ps_modem_t *modem =  data;
 
-	GSList *co_list = NULL;
 	CoreObject *co_network = NULL;
 
 	ps_dbg_ex_co(_ps_modem_ref_co_modem(modem), "network get mode by data allowed option");
 
-	co_list = tcore_plugin_get_core_objects_bytype(tcore_object_ref_plugin(modem->co_modem),
+	co_network = tcore_plugin_ref_core_object(tcore_object_ref_plugin(modem->co_modem),
 			CORE_OBJECT_TYPE_NETWORK);
-
-	if (G_UNLIKELY(co_list == NULL))
-		return;
-
-	co_network = (CoreObject *) co_list->data;
 
 	ur = tcore_user_request_new(NULL, NULL);
 	tcore_user_request_set_data(ur, 0, NULL);
@@ -1863,7 +1798,6 @@ void _ps_get_network_mode(gpointer data)
 		__ps_send_ur_dispatch_failure_response(ur, TRESP_NETWORK_GET_MODE);
 		modem->hook_flag &= PS_NETWORK_RESET_GET_MODE_FLAG;
 	}
-	g_slist_free(co_list);
 
 	return;
 }
@@ -1968,7 +1902,6 @@ gboolean _ps_get_co_modem_values(gpointer modem)
 	CoreObject *co_modem = NULL;
 	CoreObject *co_sim = NULL;
 
-	GSList *co_lists = NULL;
 	gboolean sim_init = FALSE, modem_powered = FALSE, flight_mode = FALSE;
 	int sim_status = 0;
 	enum tel_sim_type sim_type = SIM_TYPE_UNKNOWN;
@@ -1984,12 +1917,7 @@ gboolean _ps_get_co_modem_values(gpointer modem)
 	if (!plg)
 		return FALSE;
 
-	co_lists = tcore_plugin_get_core_objects_bytype(plg, CORE_OBJECT_TYPE_SIM);
-	if (!co_lists)
-		return FALSE;
-
-	co_sim = co_lists->data;
-	g_slist_free(co_lists);
+	co_sim = tcore_plugin_ref_core_object(plg, CORE_OBJECT_TYPE_SIM);
 
 	sim_status = tcore_sim_get_status(co_sim);
 	if (sim_status == SIM_STATUS_INIT_COMPLETED)

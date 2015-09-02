@@ -1,5 +1,5 @@
 /*
- * PacketService Control Module
+ * tel-plugin-packetservice
  *
  * Copyright (c) 2012 Samsung Electronics Co., Ltd. All rights reserved.
  *
@@ -27,10 +27,9 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
+#include "ps_common.h"
 #include <cynara-session.h>
 #include <cynara-creds-gdbus.h>
-
-#include "ps.h"
 
 #define PERM_WRITE	"w"
 #define PERM_EXECUTE	"x"
@@ -116,7 +115,8 @@ OUT:
 	return result;
 }
 
-GSource *ps_util_gsource_dispatch(GMainContext *main_context, gint priority, GSourceFunc cb, gpointer data)
+GSource *ps_util_gsource_dispatch(GMainContext *main_context,
+	gint priority, GSourceFunc cb, gpointer data)
 {
 	GSource *request_source = NULL;
 
@@ -128,7 +128,8 @@ GSource *ps_util_gsource_dispatch(GMainContext *main_context, gint priority, GSo
 	return request_source;
 }
 
-gboolean ps_util_thread_dispatch(GMainContext *main_context, gint priority, GSourceFunc cb, gpointer data)
+gboolean ps_util_thread_dispatch(GMainContext *main_context,
+	gint priority, GSourceFunc cb, gpointer data)
 {
 
 	GSource *request_source;
@@ -138,6 +139,9 @@ gboolean ps_util_thread_dispatch(GMainContext *main_context, gint priority, GSou
 		return FALSE;
 	}
 
+	/*
+	 * Dispatch to source
+	 */
 	request_source = ps_util_gsource_dispatch(main_context, priority, cb, data);
 	g_source_unref(request_source);
 
@@ -168,7 +172,7 @@ int ps_util_system_command(char *command)
 		argv[3] = 0;
 
 		execve("/bin/sh", argv, (char **)environ);
-		exit(127);
+		err("execve() failed");
 	}
 
 	do {
@@ -188,19 +192,21 @@ int ps_util_system_command(char *command)
 	return 0;
 }
 
-void ps_util_load_xml_file(const char *docname, const char *groupname, void **i_doc, void **i_root_node)
+void ps_util_load_xml_file(const char *docname,
+	const char *groupname, void **i_doc, void **i_root_node)
 {
 	xmlDocPtr *doc = (xmlDocPtr *)i_doc;
 	xmlNodePtr *root_node = (xmlNodePtr *)i_root_node;
 
-	dbg("docname:%s, groupname:%s", docname, groupname);
+	dbg("docname: [%s] groupname: [%s]", docname, groupname);
 
 	*doc = xmlParseFile(docname);
 	if (*doc) {
 		*root_node = xmlDocGetRootElement(*doc);
 		if (*root_node) {
-			dbg("*root_node->name:%s", (*root_node)->name);
-			if (0 == xmlStrcmp((*root_node)->name, (const unsigned char *)groupname)) {
+			dbg("*root_node->name: [%s]", (*root_node)->name);
+			if (0 == xmlStrcmp((*root_node)->name,
+					(const unsigned char *)groupname)) {
 				dbg("root_node is found !!!");
 				return;
 			} else {
@@ -208,10 +214,12 @@ void ps_util_load_xml_file(const char *docname, const char *groupname, void **i_
 				*root_node = NULL;
 			}
 		}
+
+		/* Free doc */
 		xmlFreeDoc(*doc);
 		*doc = NULL;
 	} else {
-		err("fail to parse doc(%s)", docname);
+		err("Failed to parse doc: [%s]", docname);
 	}
 }
 
@@ -222,8 +230,10 @@ void ps_util_unload_xml_file(void **i_doc, void **i_root_node)
 
 	dbg("unloading XML");
 	if (doc && *doc) {
+		/* Free doc */
 		xmlFreeDoc(*doc);
 		*doc = NULL;
+
 		if (root_node)
 			*root_node = NULL;
 	}
