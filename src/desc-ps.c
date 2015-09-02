@@ -1,5 +1,5 @@
 /*
- * PacketService Control Module
+ * tel-plugin-packetservice
  *
  * Copyright (c) 2012 Samsung Electronics Co., Ltd. All rights reserved.
  *
@@ -20,9 +20,44 @@
  *
  */
 
+#include <stdio.h>
+
 #include <glib.h>
+
 #include <tcore.h>
+#include <plugin.h>
 
-gboolean ps_main_init(TcorePlugin *plugin);
+#include "ps_main.h"
 
-void ps_main_exit(TcorePlugin *plugin);
+static gboolean on_load()
+{
+	dbg("i'm load!");
+
+	return TRUE;
+}
+
+static gboolean on_init(TcorePlugin *plugin)
+{
+	dbg("i'm init!");
+
+	return ps_main_init(plugin);
+}
+
+static void on_unload(TcorePlugin *plugin)
+{
+	dbg("i'm unload!");
+
+	ps_main_exit(plugin);
+}
+
+/*
+ * Packet service plug-in descriptor structure
+ */
+EXPORT_API struct tcore_plugin_define_desc plugin_define_desc = {
+	.name = "PACKETSERVICE",
+	.priority = TCORE_PLUGIN_PRIORITY_MID + 1,
+	.version = 1,
+	.load = on_load,
+	.init = on_init,
+	.unload = on_unload
+};

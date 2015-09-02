@@ -52,7 +52,9 @@ CREATE TABLE pdp_profile(
 	hidden               INTEGER,
 	editable             INTEGER,
 	default_internet_con INTEGER,
-	user_defined         INTEGER
+	user_defined         INTEGER,
+	is_roaming_apn	     INTEGER,
+	profile_enable       INTEGER
 	);
 
 DROP TABLE IF EXISTS "svc_category";
@@ -60,7 +62,7 @@ CREATE TABLE svc_category(
 	svc_category_id	INTEGER PRIMARY KEY,
 	svc_name	TEXT
 	);
-	
+
 INSERT INTO "svc_category" VALUES(0,'LTE IMS');
 INSERT INTO "svc_category" VALUES(1,'internet');
 INSERT INTO "svc_category" VALUES(2,'mms');

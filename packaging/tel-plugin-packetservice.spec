@@ -1,11 +1,11 @@
 %define major 0
 %define minor 3
-%define patchlevel 14
+%define patchlevel 15
 
 Name:           tel-plugin-packetservice
 Version:        %{major}.%{minor}.%{patchlevel}
 Release:        0
-License:        Apache
+License:        Apache-2.0
 Summary:        Telephony Packet Service library
 Group:          System/Libraries
 Source0:        tel-plugin-packetservice-%{version}.tar.gz
@@ -114,9 +114,10 @@ mkdir -p %{buildroot}%{_datadir}/license
 %defattr(644,system,system,-)
 /opt/etc/dump.d/module.d/dump_packetservice.sh
 #%doc COPYING
+#/opt/usr/devel/usr/bin/apnbuilder
 %{_datadir}/ps-plugin/dnet_db.sql
 %{_datadir}/ps-plugin/dnet_db_init.sql
-%{_datadir}/ps-plugin/apns-conf.xml
+#%{_datadir}/ps-plugin/apns-conf.xml
 %{_sysconfdir}/opt/upgrade/*
 %{_libdir}/telephony/plugins/ps-plugin*
 %{_datadir}/license/tel-plugin-packetservice

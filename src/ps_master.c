@@ -1,5 +1,5 @@
 /*
- * PacketService Control Module
+ * tel-plugin-packetservice
  *
  * Copyright (c) 2012 Samsung Electronics Co., Ltd. All rights reserved.
  *
@@ -22,7 +22,7 @@
 
 #include <unistd.h>
 
-#include "ps.h"
+#include "ps_common.h"
 #include "generated-code.h"
 
 #include <server.h>
@@ -31,6 +31,7 @@
 #include <hal.h>
 #include <user_request.h>
 #include <co_context.h>
+
 #define PS_MASTER_PATH	"/"
 #define PROP_DEFAULT		FALSE
 #define PROP_DEFAULT_STR	NULL
@@ -50,9 +51,8 @@ static void __ps_master_storage_key_callback(enum tcore_storage_key key, void *v
 static void __ps_master_handle_ups_mode(gpointer object, gchar *request)
 {
 	ps_modem_t *modem = object;
-	GHashTableIter iter;
-	gpointer key, value;
-	GHashTable *contexts = NULL;
+	GSList *contexts = NULL;
+	unsigned int index;
 
 	if (modem == NULL)
 		return;
@@ -64,16 +64,16 @@ static void __ps_master_handle_ups_mode(gpointer object, gchar *request)
 		return;
 	}
 
-	g_hash_table_iter_init(&iter, contexts);
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+	for (index = 0; index < g_slist_length(contexts); index++) {
 		gchar *s_path = NULL;
+		gpointer value = g_slist_nth_data(contexts, index);
 		ps_context_t *pscontext = (ps_context_t *)value;
 		int role = tcore_context_get_role(pscontext->co_context);
 
 		s_path = _ps_context_ref_path(value);
-		dbg("key(%s), value(%p), path(%s)", (gchar *)key, value, s_path);
+		dbg("value(%p), path(%s)", value, s_path);
 
-		if (role == CONTEXT_ROLE_INTERNET && pscontext->default_internet) {
+		if (role == CONTEXT_ROLE_INTERNET && pscontext->is_default) {
 			if (!g_strcmp0(request, "IfaceDown"))
 				_ps_context_handle_ifacedown(value);
 			else if (!g_strcmp0(request, "IfaceUp"))
@@ -254,7 +254,11 @@ static void __ps_master_storage_key_callback(enum tcore_storage_key key, void *v
 		} else if (key == KEY_PM_STATE) {
 			gint pm_state = g_variant_get_int32(tmp);
 			gint ps_mode = _ps_modem_get_psmode(h_value);
-			dbg("current power saving mode: %d", ps_mode);
+			dbg("current power saving mode: %d, pm_state: %d", ps_mode, pm_state);
+			if (ps_mode & POWER_SAVING_MODE_FMM) {
+				warn("UPS by FMM: Do not change data network state.");
+				return;
+			}
 			if (pm_state == 3) {/* LCD Off */
 				if (ps_mode > POWER_SAVING_MODE_NORMAL && ps_mode < POWER_SAVING_MODE_WEARABLE) {
 					msg("[PSINFO] LCD OFF. Start Deactivate with power saving [%d]", ps_mode);
@@ -307,7 +311,6 @@ gpointer _ps_master_create_master(GDBusConnection *conn, TcorePlugin *p)
 	PacketServiceMaster *master = NULL;
 	ps_master_t *new_master = NULL;
 	GError *error = NULL;
-	TReturn ret = TCORE_RETURN_SUCCESS;
 
 	dbg("master object create");
 	g_return_val_if_fail(conn != NULL, NULL);
@@ -364,7 +367,7 @@ gpointer _ps_master_create_master(GDBusConnection *conn, TcorePlugin *p)
 		TNOTI_SERVER_ADDED_MODEM_PLUGIN, __on_hook_modem_added, new_master);
 
 	/*Adding Hook for modem removal laters*/
-	ret = tcore_server_add_notification_hook(tcore_plugin_ref_server(p),
+	tcore_server_add_notification_hook(tcore_plugin_ref_server(p),
 		TNOTI_SERVER_REMOVED_MODEM_PLUGIN, __on_hook_modem_removed, new_master);
 
 	dbg("Successfully created the master");
@@ -382,7 +385,6 @@ gboolean _ps_master_create_modems(gpointer object, TcorePlugin *modem_plg)
 	gpointer modem = NULL, tmp = NULL;
 	ps_master_t *master = NULL;
 	CoreObject *co_modem = NULL;
-	GSList *modemlists = NULL;
 	gchar *modem_name = NULL;
 	gchar *cp_name = NULL;
 
@@ -400,16 +402,10 @@ gboolean _ps_master_create_modems(gpointer object, TcorePlugin *modem_plg)
 			return FALSE;
 		}
 
-		modemlists = tcore_plugin_get_core_objects_bytype(modem_plg, CORE_OBJECT_TYPE_MODEM);
-		dbg("plug-in %p, modemlists(%p)", modem_plg, modemlists);
-		if (!modemlists) {
-			g_free(modem_name);
-			return FALSE;
-		}
-		co_modem = modemlists->data;
-		g_slist_free(modemlists);
+		co_modem = tcore_plugin_ref_core_object(modem_plg, CORE_OBJECT_TYPE_MODEM);
 
-		modem = _ps_modem_create_modem(master->conn, master->plg, master, modem_name, co_modem, cp_name);
+		modem = _ps_modem_create_modem(master->conn, master->plg,
+			master, modem_name, co_modem, cp_name);
 		if (modem == NULL) {
 			dbg("fail to create modem");
 			g_free(modem_name);
