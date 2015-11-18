@@ -171,6 +171,16 @@ gboolean ps_main_init(TcorePlugin *p)
 	 */
 	priv_info->conn = conn;
 
+	/*
+	 * Initialize fields that may be used in the on_bus_acquired() callback.
+	 */
+	priv_info->master = NULL;
+
+	/*
+	 * Setting User data of PS plugin to be used by the on_bus_acquired() callback.
+	 */
+	tcore_plugin_link_user_data(p, (void *)priv_info);
+
 	id = g_bus_own_name_on_connection(conn,
 		PS_DBUS_SERVICE,
 		G_BUS_NAME_OWNER_FLAGS_REPLACE,
@@ -186,14 +196,8 @@ gboolean ps_main_init(TcorePlugin *p)
 	 * Initializing custom data for Packet Service
 	 */
 	priv_info->bus_id = id;
-	priv_info->master = NULL;
 	priv_info->p = p;
 	priv_info->p_cynara = p_cynara;
-
-	/*
-	 * Setting User data of PS plugin
-	 */
-	tcore_plugin_link_user_data(p, (void *)priv_info);
 
 	return TRUE;
 }
