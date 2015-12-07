@@ -1,6 +1,6 @@
 %define major 0
 %define minor 3
-%define patchlevel 15
+%define patchlevel 16
 
 Name:           tel-plugin-packetservice
 Version:        %{major}.%{minor}.%{patchlevel}
@@ -9,6 +9,7 @@ License:        Apache-2.0
 Summary:        Telephony Packet Service library
 Group:          System/Libraries
 Source0:        tel-plugin-packetservice-%{version}.tar.gz
+Source1:        tel-plugin-ps.conf
 BuildRequires:  cmake
 BuildRequires:  python
 BuildRequires:  python-xml
@@ -108,6 +109,8 @@ fi
 %install
 %make_install
 mkdir -p %{buildroot}%{_datadir}/license
+mkdir -p %{buildroot}/etc/dbus-1/system.d/
+cp %{SOURCE1} %{buildroot}/etc/dbus-1/system.d/tel-plugin-ps.conf
 
 %files
 %manifest tel-plugin-packetservice.manifest
@@ -121,3 +124,4 @@ mkdir -p %{buildroot}%{_datadir}/license
 %{_sysconfdir}/opt/upgrade/*
 %{_libdir}/telephony/plugins/ps-plugin*
 %{_datadir}/license/tel-plugin-packetservice
+/etc/dbus-1/system.d/tel-plugin-ps.conf
