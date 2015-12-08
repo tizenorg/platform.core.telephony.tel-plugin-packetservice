@@ -30,21 +30,6 @@
 #include "ps_main.h"
 #include <ps_common.h>
 
-/*
- * PS plugin Private information
- */
-typedef struct {
-	GDBusConnection *conn; /* DBUS connection */
-	guint bus_id; /* Packet service BUS ID */
-
-	/* Parent plug-in */
-	TcorePlugin *p;
-
-	/* List of masters */
-	GSList *master;
-	cynara *p_cynara;
-} PsPrivInfo;
-
 static void __packet_service_cleanup(PsPrivInfo *priv_info)
 {
 	/* Sanity Check */

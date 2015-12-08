@@ -114,6 +114,21 @@
 #define PS_CDMA_DUMMY_PROFILE_IDX 0
 #define PS_CDMA_DUMMY_PROFILE_PLMN "00000"
 
+/*
+ * PS plugin Private information
+ */
+typedef struct {
+	GDBusConnection *conn; /* DBUS connection */
+	guint bus_id; /* Packet service BUS ID */
+
+	/* Parent plug-in */
+	TcorePlugin *p;
+
+	/* List of masters */
+	GSList *master;
+	cynara *p_cynara;
+} PsPrivInfo;
+
 typedef enum {
 	PS_SUBS_PRIMARY,
 	PS_SUBS_SECONDARY,
