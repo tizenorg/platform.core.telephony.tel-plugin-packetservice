@@ -1038,7 +1038,8 @@ static gboolean on_modem_get_properties(PacketServiceModem *obj_modem,
 	GVariantBuilder properties;
 	ps_modem_t *modem = user_data;
 	TcorePlugin *p = (modem) ? modem->plg : NULL;
-	cynara *p_cynara = tcore_plugin_ref_user_data(p);
+	PsPrivInfo *priv_info = tcore_plugin_ref_user_data(p);
+	cynara *p_cynara = (priv_info) ? priv_info->p_cynara : NULL;
 
 	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PUBLIC, "r"))
 		return TRUE;
@@ -1062,7 +1063,8 @@ static gboolean on_modem_get_services(PacketServiceModem *obj_modem,
 	ps_modem_t *modem = user_data;
 	CoreObject *co_modem = _ps_modem_ref_co_modem(modem);
 	TcorePlugin *p = (modem) ? modem->plg : NULL;
-	cynara *p_cynara = tcore_plugin_ref_user_data(p);
+	PsPrivInfo *priv_info = tcore_plugin_ref_user_data(p);
+	cynara *p_cynara = (priv_info) ? priv_info->p_cynara : NULL;
 
 	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PUBLIC, "r"))
 		return TRUE;
@@ -1106,7 +1108,8 @@ static gboolean on_modem_go_dormant_all(PacketServiceModem *obj_modem,
 	gpointer key, value;
 	ps_modem_t *modem = user_data;
 	TcorePlugin *p = (modem) ? modem->plg : NULL;
-	cynara *p_cynara = tcore_plugin_ref_user_data(p);
+	PsPrivInfo *priv_info = tcore_plugin_ref_user_data(p);
+	cynara *p_cynara = (priv_info) ? priv_info->p_cynara : NULL;
 
 	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PRIVATE, "w"))
 		return TRUE;
@@ -1141,7 +1144,8 @@ static gboolean on_modem_get_profile_list(PacketServiceModem *obj_modem,
 	ps_modem_t *modem = user_data;
 	CoreObject *co_modem = _ps_modem_ref_co_modem(modem);
 	TcorePlugin *p = (modem) ? modem->plg : NULL;
-	cynara *p_cynara = tcore_plugin_ref_user_data(p);
+	PsPrivInfo *priv_info = tcore_plugin_ref_user_data(p);
+	cynara *p_cynara = (priv_info) ? priv_info->p_cynara : NULL;
 
 	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PUBLIC, "r"))
 		return TRUE;
@@ -1206,7 +1210,8 @@ static gboolean on_modem_add_profile(PacketServiceModem *obj_modem,
 	CoreObject *co_modem = _ps_modem_ref_co_modem(modem);
 	GHashTable *profile_property = NULL;
 	TcorePlugin *p = (modem) ? modem->plg : NULL;
-	cynara *p_cynara = tcore_plugin_ref_user_data(p);
+	PsPrivInfo *priv_info = tcore_plugin_ref_user_data(p);
+	cynara *p_cynara = (priv_info) ? priv_info->p_cynara : NULL;
 
 	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PROFILE, "w"))
 		return TRUE;
@@ -1314,7 +1319,8 @@ static gboolean on_modem_reset_profile(PacketServiceModem *obj_modem,
 	CoreObject *co_ps;
 	int state;
 	TcorePlugin *p = (modem) ? modem->plg : NULL;
-	cynara *p_cynara = tcore_plugin_ref_user_data(p);
+	PsPrivInfo *priv_info = tcore_plugin_ref_user_data(p);
+	cynara *p_cynara = (priv_info) ? priv_info->p_cynara : NULL;
 
 	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PROFILE, "w"))
 		return TRUE;
