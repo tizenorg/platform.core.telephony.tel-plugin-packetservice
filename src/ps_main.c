@@ -36,12 +36,6 @@ static void __packet_service_cleanup(PsPrivInfo *priv_info)
 	if (priv_info == NULL)
 		return;
 
-	/* Free cynara handle */
-	if (priv_info->p_cynara) {
-		cynara_finish(priv_info->p_cynara);
-		priv_info->p_cynara = NULL;
-	}
-
 	/* Cleaning up the master list */
 	g_slist_foreach(priv_info->master,
 		__remove_master, NULL);
@@ -107,7 +101,6 @@ gboolean ps_main_init(TcorePlugin *p)
 
 	GError *error = NULL;
 	gboolean rv = FALSE;
-	cynara *p_cynara = NULL;
 
 	if (!p)
 		return FALSE;
@@ -127,14 +120,6 @@ gboolean ps_main_init(TcorePlugin *p)
 	priv_info = g_try_malloc0(sizeof(PsPrivInfo));
 	if (!priv_info) {
 		err("Failure :Memory allocation !!");
-		return FALSE;
-	}
-
-	/* Initialize cynara handle */
-	if (CYNARA_API_SUCCESS == cynara_initialize(&p_cynara, NULL)) {
-		dbg("cynara handle is successfully initialized.");
-	} else {
-		err("Failed to initialize cynara handle.");
 		return FALSE;
 	}
 
@@ -173,7 +158,6 @@ gboolean ps_main_init(TcorePlugin *p)
 	priv_info->bus_id = id;
 	priv_info->master = NULL;
 	priv_info->p = p;
-	priv_info->p_cynara = p_cynara;
 
 	/*
 	 * Setting User data of PS plugin

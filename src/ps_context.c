@@ -2698,13 +2698,6 @@ static gboolean on_context_get_properties(PacketServiceContext *obj_context,
 {
 	GVariant *gv = NULL;
 	GVariantBuilder property;
-	ps_context_t *pscontext = user_data;
-	TcorePlugin *p = (pscontext) ? pscontext->plg : NULL;
-	PsPrivInfo *priv_info = tcore_plugin_ref_user_data(p);
-	cynara *p_cynara = (priv_info) ? priv_info->p_cynara : NULL;
-
-	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PUBLIC, "r"))
-		return TRUE;
 
 	dbg("Entered");
 	gv = _ps_context_get_properties(user_data, &property);
@@ -2718,13 +2711,6 @@ static gboolean on_context_get_profile(PacketServiceContext *obj_context,
 {
 	GVariant *gv = NULL;
 	GVariantBuilder profile;
-	ps_context_t *pscontext = user_data;
-	TcorePlugin *p = (pscontext) ? pscontext->plg : NULL;
-	PsPrivInfo *priv_info = tcore_plugin_ref_user_data(p);
-	cynara *p_cynara = (priv_info) ? priv_info->p_cynara : NULL;
-
-	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PUBLIC, "r"))
-		return TRUE;
 
 	dbg("Entered");
 	gv = __ps_context_get_profile_properties(user_data, &profile);
@@ -2749,12 +2735,6 @@ static gboolean on_context_handle_activate(PacketServiceContext *obj_context,
 	CoreObject *co_network;
 
 	ps_context_t *pscontext = user_data;
-	TcorePlugin *p = (pscontext) ? pscontext->plg : NULL;
-	PsPrivInfo *priv_info = tcore_plugin_ref_user_data(p);
-	cynara *p_cynara = (priv_info) ? priv_info->p_cynara : NULL;
-
-	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PRIVATE, "w"))
-		return TRUE;
 
 	dbg("Entered");
 	if (pscontext == NULL) {
@@ -2881,12 +2861,6 @@ static gboolean on_context_handle_deactiavte(PacketServiceContext *obj_context,
 	CoreObject *co_network;
 	int context_state = 0;
 	ps_context_t *pscontext = user_data;
-	TcorePlugin *p = (pscontext) ? pscontext->plg : NULL;
-	PsPrivInfo *priv_info = tcore_plugin_ref_user_data(p);
-	cynara *p_cynara = (priv_info) ? priv_info->p_cynara : NULL;
-
-	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PRIVATE, "w"))
-		return TRUE;
 
 	dbg("Entered");
 	if (pscontext == NULL) {
@@ -2941,13 +2915,7 @@ static gboolean on_context_set_default_connection(PacketServiceContext *obj_cont
 	gpointer service = NULL;
 	gpointer cur_default_ctx = NULL;
 	ps_context_t *pscontext = user_data;
-	TcorePlugin *p = (pscontext) ? pscontext->plg : NULL;
-	PsPrivInfo *priv_info = tcore_plugin_ref_user_data(p);
-	cynara *p_cynara = (priv_info) ? priv_info->p_cynara : NULL;
 	CoreObject *co_network;
-
-	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PROFILE, "w"))
-		return TRUE;
 
 	dbg("enter set default connection ps_context_t(%p)", pscontext);
 	if (pscontext == NULL) {
@@ -3030,14 +2998,8 @@ static gboolean on_context_modify_profile(PacketServiceContext *obj_context,
 	gboolean rv = FALSE;
 	int context_state = 0;
 	ps_context_t *context = user_data;
-	TcorePlugin *p = (context) ? context->plg : NULL;
-	PsPrivInfo *priv_info = tcore_plugin_ref_user_data(p);
-	cynara *p_cynara = (priv_info) ? priv_info->p_cynara : NULL;
 	CoreObject *co_network = _ps_service_ref_co_network(_ps_context_ref_service(context));
 	GHashTable *profile_property = NULL;
-
-	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PROFILE, "w"))
-		return TRUE;
 
 	ps_dbg_ex_co(co_network, "modify context's profile properties");
 
@@ -3083,12 +3045,7 @@ static gboolean on_context_remove_profile(PacketServiceContext *obj_context,
 	ps_context_t *context = user_data;
 	ps_service_t *service = _ps_context_ref_service(context);
 	CoreObject *co_network = _ps_service_ref_co_network(service);
-	TcorePlugin *p = (context) ? context->plg : NULL;
-	PsPrivInfo *priv_info = tcore_plugin_ref_user_data(p);
-	cynara *p_cynara = (priv_info) ? priv_info->p_cynara : NULL;
 
-	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PROFILE, "w"))
-		return TRUE;
 	g_return_val_if_fail(service != NULL, FALSE);
 
 	ps_dbg_ex_co(co_network, "Remove context.");

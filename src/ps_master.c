@@ -579,12 +579,6 @@ static gboolean on_master_get_modems(PacketServiceMaster *obj_master,
 	GHashTableIter iter;
 	gpointer key, value;
 	ps_master_t *master = user_data;
-	TcorePlugin *p = (master) ? master->plg : NULL;
-	PsPrivInfo *priv_info = tcore_plugin_ref_user_data(p);
-	cynara *p_cynara = (priv_info) ? priv_info->p_cynara : NULL;
-
-	if (!ps_util_check_access_control(p_cynara, invocation, AC_PS_PUBLIC, "r"))
-		return TRUE;
 
 	dbg("Entered");
 

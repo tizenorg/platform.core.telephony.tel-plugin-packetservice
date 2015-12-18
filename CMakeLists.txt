@@ -14,7 +14,7 @@ endif()
 
 # Set required packages
 INCLUDE(FindPkgConfig)
-pkg_check_modules(pkgs REQUIRED glib-2.0 gio-2.0 gio-unix-2.0 tcore iniparser vconf alarm-service libxml-2.0 cynara-client cynara-creds-gdbus cynara-session)
+pkg_check_modules(pkgs REQUIRED glib-2.0 gio-2.0 gio-unix-2.0 tcore iniparser vconf alarm-service libxml-2.0)
 
 FOREACH(flag ${pkgs_CFLAGS})
 	SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} ${flag}")

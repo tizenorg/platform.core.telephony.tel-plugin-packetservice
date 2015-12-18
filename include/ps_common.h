@@ -37,8 +37,6 @@
 #include <core_object.h>
 #include <hal.h>
 
-#include <cynara-client.h>
-
 #include "generated-code.h"
 #include "ps_log.h"
 
@@ -95,10 +93,6 @@
 #define PS_ERR_WRONG_PROFILE "Wrong Profile"
 #define PS_ERR_MAX "Unknown Error"
 
-#define AC_PS_PUBLIC			"telephony_framework::api_ps_public"
-#define AC_PS_PRIVATE			"telephony_framework::api_ps_private"
-#define AC_PS_PROFILE			"telephony_framework::api_ps_profile"
-
 #define BOOL2STRING(a)	((a == TRUE) ? ("TRUE") : ("FALSE"))
 #define CHAR2STRING(a)	g_strdup_printf("%c", a)
 #define INT2STRING(a)	g_strdup_printf("%d", a)
@@ -126,7 +120,6 @@ typedef struct {
 
 	/* List of masters */
 	GSList *master;
-	cynara *p_cynara;
 } PsPrivInfo;
 
 typedef enum {
@@ -452,7 +445,6 @@ enum tcore_hook_return __on_hook_modem_added(Server *s, CoreObject *source, enum
 enum tcore_hook_return __on_hook_modem_removed(Server *s, CoreObject *source, enum tcore_notification_command command, unsigned int data_len, void *data, void *user_data);
 
 /* util.c */
-gboolean ps_util_check_access_control (cynara *p_cynara, GDBusMethodInvocation *invoc, const char *label, const char *perm);
 GSource * ps_util_gsource_dispatch(GMainContext *main_context, gint priority, GSourceFunc cb, gpointer data);
 gboolean ps_util_thread_dispatch(GMainContext *main_context, gint priority, GSourceFunc cb, gpointer data);
 int  ps_util_system_command(char * command);
