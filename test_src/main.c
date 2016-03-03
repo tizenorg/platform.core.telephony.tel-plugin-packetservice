@@ -26,6 +26,8 @@
 #include <wait.h>
 #include <errno.h>
 
+#include <tzplatform_config.h>
+
 #include <glib.h>
 #include <gio/gio.h>
 #include <db-util.h>
@@ -33,7 +35,7 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
-#define DATABASE_PATH "/opt/dbspace/.dnet.db"
+#define DATABASE_PATH tzplatform_mkpath(TZ_SYS_DB, ".dnet.db")
 #define msg(fmt, args...) do { printf(fmt "\n", ##args); fflush(stdout); } while (0)
 
 enum context_type {

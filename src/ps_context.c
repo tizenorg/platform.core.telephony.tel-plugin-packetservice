@@ -24,6 +24,7 @@
 #include "ps_common.h"
 #include "generated-code.h"
 
+#include <tzplatform_config.h>
 #include <tcore.h>
 #include <plugin.h>
 #include <server.h>
@@ -43,8 +44,8 @@
 
 #define PROP_DEFAULT		FALSE
 #define PROP_DEFAULT_STR	NULL
-#define DATABASE_PATH_0		"/opt/dbspace/.dnet.db"
-#define DATABASE_PATH_1		"/opt/dbspace/.dnet2.db"
+#define DATABASE_PATH_0		tzplatform_mkpath(TZ_SYS_DB, ".dnet.db")
+#define DATABASE_PATH_1		tzplatform_mkpath(TZ_SYS_DB, ".dnet2.db")
 #define DELAY_TO_SIGNAL_EMIT 1
 
 typedef struct {
