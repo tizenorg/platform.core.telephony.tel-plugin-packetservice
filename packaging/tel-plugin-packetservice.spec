@@ -1,6 +1,6 @@
 %define major 0
 %define minor 3
-%define patchlevel 20
+%define patchlevel 21
 
 Name:           tel-plugin-packetservice
 Version:        %{major}.%{minor}.%{patchlevel}
@@ -23,6 +23,7 @@ BuildRequires:  pkgconfig(tcore)
 BuildRequires:  pkgconfig(db-util)
 BuildRequires:  pkgconfig(vconf)
 BuildRequires: 	pkgconfig(alarm-service)
+BuildRequires:  pkgconfig(libtzplatform-config)
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 
@@ -49,56 +50,44 @@ make %{?_smp_mflags}
 /sbin/ldconfig
 
 #create db
-mkdir -p /opt/dbspace
+mkdir -p %TZ_SYS_DB
 
-if [ ! -f /opt/dbspace/.dnet.db ]
+if [ ! -f %TZ_SYS_DB/.dnet.db ]
 then
-  sqlite3 /opt/dbspace/.dnet.db < /usr/share/ps-plugin/dnet_db.sql
-  sqlite3 /opt/dbspace/.dnet.db < /usr/share/ps-plugin/dnet_db_init.sql
+  sqlite3 %TZ_SYS_DB/.dnet.db < /usr/share/ps-plugin/dnet_db.sql
+  sqlite3 %TZ_SYS_DB/.dnet.db < /usr/share/ps-plugin/dnet_db_init.sql
 fi
-if [ ! -f /opt/dbspace/.dnet2.db ]
+if [ ! -f %TZ_SYS_DB/.dnet2.db ]
 then
-  sqlite3 /opt/dbspace/.dnet2.db < /usr/share/ps-plugin/dnet_db.sql
-  sqlite3 /opt/dbspace/.dnet2.db < /usr/share/ps-plugin/dnet_db_init.sql
+  sqlite3 %TZ_SYS_DB/.dnet2.db < /usr/share/ps-plugin/dnet_db.sql
+  sqlite3 %TZ_SYS_DB/.dnet2.db < /usr/share/ps-plugin/dnet_db_init.sql
 fi
 
 rm -f /usr/share/ps-plugin/dnet_db.sql
 
 #change file permission
-if [ -f /opt/dbspace/.dnet.db ]
+if [ -f %TZ_SYS_DB/.dnet.db ]
 then
-	chmod 660 /opt/dbspace/.dnet.db
-	chown system:system /opt/dbspace/.dnet.db
+	chmod 660 %TZ_SYS_DB/.dnet.db
+	chown system:system %TZ_SYS_DB/.dnet.db
 fi
 
-if [ -f /opt/dbspace/.dnet.db-journal ]
+if [ -f %TZ_SYS_DB/.dnet.db-journal ]
 then
-	chmod 664 /opt/dbspace/.dnet.db-journal
-	chown system:system /opt/dbspace/.dnet.db-journal
+	chmod 664 %TZ_SYS_DB/.dnet.db-journal
+	chown system:system %TZ_SYS_DB/.dnet.db-journal
 fi
 
-if [ -f /opt/dbspace/.dnet2.db ]
+if [ -f %TZ_SYS_DB/.dnet2.db ]
 then
-	chmod 660 /opt/dbspace/.dnet2.db
-	chown system:system /opt/dbspace/.dnet2.db
+	chmod 660 %TZ_SYS_DB/.dnet2.db
+	chown system:system %TZ_SYS_DB/.dnet2.db
 fi
 
-if [ -f /opt/dbspace/.dnet2.db-journal ]
+if [ -f %TZ_SYS_DB/.dnet2.db-journal ]
 then
-	chmod 664 /opt/dbspace/.dnet2.db-journal
-	chown system:system /opt/dbspace/.dnet2.db-journal
-fi
-
-if [ -f /etc/opt/upgrade/520.tel-plugin-packetservice.patch.sh ]
-then
-	chmod 700 /etc/opt/upgrade/520.tel-plugin-packetservice.patch.sh
-	chown system:system /etc/opt/upgrade/520.tel-plugin-packetservice.patch.sh
-fi
-
-if [ -f /opt/etc/dump.d/module.d/dump_packetservice.sh ]
-then
-	chmod 700 /opt/etc/dump.d/module.d/dump_packetservice.sh
-	chown system:system /opt/etc/dump.d/module.d/dump_packetservice.sh
+	chmod 664 %TZ_SYS_DB/.dnet2.db-journal
+	chown system:system %TZ_SYS_DB/.dnet2.db-journal
 fi
 
 %postun -p /sbin/ldconfig
@@ -112,13 +101,10 @@ cp %{SOURCE1} %{buildroot}/etc/dbus-1/system.d/tel-plugin-ps.conf
 %files
 %manifest tel-plugin-packetservice.manifest
 %defattr(644,system,system,-)
-/opt/etc/dump.d/module.d/dump_packetservice.sh
 #%doc COPYING
-#/opt/usr/devel/usr/bin/apnbuilder
 %{_datadir}/ps-plugin/dnet_db.sql
 %{_datadir}/ps-plugin/dnet_db_init.sql
 #%{_datadir}/ps-plugin/apns-conf.xml
-%{_sysconfdir}/opt/upgrade/*
 %{_libdir}/telephony/plugins/ps-plugin*
 %{_datadir}/license/tel-plugin-packetservice
 /etc/dbus-1/system.d/tel-plugin-ps.conf

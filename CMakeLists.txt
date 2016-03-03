@@ -14,7 +14,7 @@ endif()
 
 # Set required packages
 INCLUDE(FindPkgConfig)
-pkg_check_modules(pkgs REQUIRED glib-2.0 gio-2.0 gio-unix-2.0 tcore iniparser vconf alarm-service libxml-2.0)
+pkg_check_modules(pkgs REQUIRED glib-2.0 gio-2.0 gio-unix-2.0 tcore iniparser vconf alarm-service libxml-2.0 libtzplatform-config)
 
 FOREACH(flag ${pkgs_CFLAGS})
 	SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} ${flag}")
@@ -78,8 +78,6 @@ SET_TARGET_PROPERTIES(ps-plugin PROPERTIES PREFIX "" OUTPUT_NAME ps-plugin)
 INSTALL(FILES ${CMAKE_SOURCE_DIR}/resources/dnet_db.sql DESTINATION ${DATAROOTDIR}/ps-plugin)
 INSTALL(FILES ${RES_DIR}/dnet_db_init.sql DESTINATION ${DATAROOTDIR}/ps-plugin)
 #INSTALL(FILES ${CMAKE_SOURCE_DIR}/resources/apns-conf.xml DESTINATION ${DATAROOTDIR}/ps-plugin)
-INSTALL(FILES ${CMAKE_SOURCE_DIR}/resources/dump_packetservice.sh DESTINATION /opt/etc/dump.d/module.d)
-INSTALL(FILES ${CMAKE_SOURCE_DIR}/resources/520.tel-plugin-packetservice.patch.sh DESTINATION ${SYSCONFDIR}/opt/upgrade)
 INSTALL(TARGETS ps-plugin LIBRARY DESTINATION ${LIBDIR}/telephony/plugins)
 INSTALL(FILES ${CMAKE_SOURCE_DIR}/LICENSE DESTINATION /usr/share/license RENAME tel-plugin-packetservice)
 
