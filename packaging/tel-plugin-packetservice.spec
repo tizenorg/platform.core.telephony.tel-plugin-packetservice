@@ -54,16 +54,16 @@ mkdir -p %TZ_SYS_DB
 
 if [ ! -f %TZ_SYS_DB/.dnet.db ]
 then
-  sqlite3 %TZ_SYS_DB/.dnet.db < /usr/share/ps-plugin/dnet_db.sql
-  sqlite3 %TZ_SYS_DB/.dnet.db < /usr/share/ps-plugin/dnet_db_init.sql
+  sqlite3 %TZ_SYS_DB/.dnet.db < %{_datadir}/ps-plugin/dnet_db.sql
+  sqlite3 %TZ_SYS_DB/.dnet.db < %{_datadir}/ps-plugin/dnet_db_init.sql
 fi
 if [ ! -f %TZ_SYS_DB/.dnet2.db ]
 then
-  sqlite3 %TZ_SYS_DB/.dnet2.db < /usr/share/ps-plugin/dnet_db.sql
-  sqlite3 %TZ_SYS_DB/.dnet2.db < /usr/share/ps-plugin/dnet_db_init.sql
+  sqlite3 %TZ_SYS_DB/.dnet2.db < %{_datadir}/ps-plugin/dnet_db.sql
+  sqlite3 %TZ_SYS_DB/.dnet2.db < %{_datadir}/ps-plugin/dnet_db_init.sql
 fi
 
-rm -f /usr/share/ps-plugin/dnet_db.sql
+rm -f %{_datadir}/ps-plugin/dnet_db.sql
 
 #change file permission
 if [ -f %TZ_SYS_DB/.dnet.db ]

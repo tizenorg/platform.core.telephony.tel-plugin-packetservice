@@ -23,6 +23,7 @@
 #include "ps_common.h"
 #include "generated-code.h"
 
+#include <tzplatform_config.h>
 #include <server.h>
 #include <plugin.h>
 #include <user_request.h>
@@ -32,6 +33,8 @@
 
 #define PROP_DEFAULT	FALSE
 #define PROP_DEFAULT_STR   NULL
+#define DATABASE_PATH_0	tzplatform_mkpath(TZ_SYS_DB, ".dnet.db")
+#define DATABASE_PATH_1	tzplatform_mkpath(TZ_SYS_DB, ".dnet2.db")
 
 struct ps_thread_data {
 	ps_modem_t *modem;
@@ -93,6 +96,7 @@ static gpointer __ps_modem_regenerate_database(gpointer data)
 	gboolean rv = FALSE;
 	ps_modem_t *modem = data;
 	struct ps_thread_data *thread_data = NULL;
+	gchar *command = NULL;
 
 	thread_data = g_try_malloc0(sizeof(*thread_data));
 	if (!thread_data) {
@@ -105,14 +109,17 @@ static gpointer __ps_modem_regenerate_database(gpointer data)
 	_ps_context_reset_profile_table(modem->cp_name);
 	/* Re-generate global APN database */
 	if (g_str_has_suffix(modem->cp_name, "1"))
-		rv = ps_util_system_command("/usr/bin/sqlite3 /opt/dbspace/.dnet2.db < /usr/share/ps-plugin/dnet_db_init.sql");
+		command = g_strdup_printf("/usr/bin/sqlite3 %s < /usr/share/ps-plugin/dnet_db_init.sql", DATABASE_PATH_1);
 	else
-		rv = ps_util_system_command("/usr/bin/sqlite3 /opt/dbspace/.dnet.db < /usr/share/ps-plugin/dnet_db_init.sql");
+		command = g_strdup_printf("/usr/bin/sqlite3 %s < /usr/share/ps-plugin/dnet_db_init.sql", DATABASE_PATH_0);
+	rv = ps_util_system_command(command);
 	ps_dbg_ex_co(modem->co_modem, "system command sent, rv(%d)", rv);
 	rv = _ps_context_fill_profile_table_from_ini_file(modem->cp_name);
 
 	if (TRUE == ps_util_thread_dispatch(g_main_context_default(), G_PRIORITY_LOW, (GSourceFunc)__ps_modem_thread_finish_cb, thread_data))
 		dbg("Thread %p processing is complete", thread_data->selfi);
+
+	g_free(command);
 
 	return NULL;
 }

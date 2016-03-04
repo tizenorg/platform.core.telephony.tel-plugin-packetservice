@@ -931,6 +931,7 @@ EXIT:
 int main(int arg, char **argv)
 {
 	int rv;
+	gchar *command = NULL;
 	__init_global_apns_from_xml("/usr/share/ps-plugin/apns-conf.xml");
 	rv = __system_command("/bin/mkdir /opt/usr/share/telephony");
 	msg("system command sent, rv(%d)", rv);
@@ -938,8 +939,10 @@ int main(int arg, char **argv)
 	rv = __system_command("/bin/rm /opt/usr/share/telephony/dnet_db_init.sql");
 	msg("system command sent, rv(%d)", rv);
 	/* Dump pdp_profile to sql */
-	rv = __system_command("/usr/bin/sqlite3 /opt/dbspace/.dnet.db .dump | grep \"INSERT INTO \\\"pdp_profile\\\"\" > /opt/usr/share/telephony/dnet_db_init.sql");
+	command = g_strdup_printf("/usr/bin/sqlite3 %s .dump | grep \"INSERT INTO \\\"pdp_profile\\\"\" > /opt/usr/share/telephony/dnet_db_init.sql", DATABASE_PATH);
+	rv = __system_command(command);
 	msg("system command sent, rv(%d)", rv);
+	g_free(command);
 	return 0;
 }
 
