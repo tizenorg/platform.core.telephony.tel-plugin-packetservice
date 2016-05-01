@@ -14,6 +14,14 @@ Reviewed-on: https://review.tizen.org/gerrit/67896
 Project: platform/core/telephony/tel-plugin-packetservice
 Branch: refs/heads/tizen
 
+Verified+1: JooSeok Park <jooseok.park@samsung.com>
+Code-Review+1: JooSeok Park <jooseok.park@samsung.com>
+Submitted-by: JooSeok Park <jooseok.park@samsung.com>
+Submitted-at: Thu, 28 Apr 2016 23:48:34 -0700
+Reviewed-on: https://review.tizen.org/gerrit/67896
+Project: platform/core/telephony/tel-plugin-packetservice
+Branch: refs/heads/tizen
+
 Code-Review+2: JooSeok Park <jooseok.park@samsung.com>
 Verified+1: JooSeok Park <jooseok.park@samsung.com>
 Submitted-by: JooSeok Park <jooseok.park@samsung.com>
