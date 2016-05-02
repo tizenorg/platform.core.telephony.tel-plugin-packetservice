@@ -1104,6 +1104,30 @@ int _ps_service_update_roaming_apn(gpointer object)
 			rv = _ps_service_set_number_of_pdn_cnt(object, modem->operator);
 			rv = _ps_service_ref_contexts(object, contexts, modem->operator);
 		}
+	} else {
+		/* Iterate through each context and check home and roaming pdp protocol type.
+		  * If its same NO need to deactivate context.
+		  * Otherwise de-activate context as home and roam pdp protocol type mismatched
+		  */
+		enum co_context_type home_pdp_protocol, roam_pdp_protocol;
+		guint index;
+		ps_context_t *pscontext;
+
+		for (index = 0; index < g_slist_length(service->contexts); index++) {
+			pscontext = g_slist_nth_data(service->contexts, index);
+			home_pdp_protocol = tcore_context_get_type(pscontext->co_context);
+			roam_pdp_protocol = tcore_context_get_roam_pdp_type(pscontext->co_context);
+			if (home_pdp_protocol == roam_pdp_protocol) {
+				ps_dbg_ex_co(_ps_modem_ref_co_modem(modem), "home and roam pdp protocol type matched. No need to de-activate");
+				continue;
+			}
+
+			/* De-activate context as home and roam pdp protocol type mismatched */
+			ps_dbg_ex_co(_ps_modem_ref_co_modem(modem), "home[%d] and roam[%d] pdp protocol type mis-matched. De-activate if context is already activated",
+				home_pdp_protocol, roam_pdp_protocol);
+			_ps_service_reset_connection_timer(pscontext);
+			_ps_service_deactivate_context(service, pscontext);
+		}
 	}
 	dbg("rv: %d", rv);
 	return rv;

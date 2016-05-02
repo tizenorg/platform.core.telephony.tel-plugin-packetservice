@@ -38,6 +38,7 @@ CREATE TABLE pdp_profile(
 	auth_id              TEXT,
 	auth_pwd             TEXT,
 	pdp_protocol         INTEGER,
+	roam_pdp_protocol    INTEGER,
 	proxy_ip_addr        TEXT,
 	home_url             TEXT,
 	linger_time          INTEGER,

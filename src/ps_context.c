@@ -341,7 +341,7 @@ static gboolean __ps_context_create_co_context(gpointer object, GHashTable *prop
 	gchar *profile_name = NULL;
 	gchar *apn = NULL;
 	gchar *auth_id = NULL, *auth_pwd = NULL, *home_url = NULL, *proxy_addr = NULL;
-	int auth_type = 0, svc_ctg_id = 0, pdp_type = 0;
+	int auth_type = 0, svc_ctg_id = 0, pdp_type = 0, roam_pdp_type = 0;
 	gboolean hidden = FALSE, editable = FALSE, default_conn = FALSE, user_defined = FALSE, is_roaming_apn = FALSE, profile_enable = TRUE;
 
 	g_hash_table_iter_init(&iter, (GHashTable *) property);
@@ -448,6 +448,11 @@ static gboolean __ps_context_create_co_context(gpointer object, GHashTable *prop
 				profile_enable = atoi((const char*) value);
 				dbg("profile enable (%d)", profile_enable);
 			}
+		} else if (g_str_equal(key, "26") == TRUE) {
+			if (value) {
+				roam_pdp_type = atoi((const char *) value);
+				info("Roam pdp type (%d)", roam_pdp_type);
+			}
 		}
 	}
 
@@ -457,10 +462,11 @@ static gboolean __ps_context_create_co_context(gpointer object, GHashTable *prop
 	co_context = tcore_context_new(context->plg, path, NULL);
 #ifdef TIZEN_PS_IPV4_ONLY
 	dbg("pdp type has been changed (%d)", CONTEXT_TYPE_IP);
-	tcore_context_set_type(co_context, CONTEXT_TYPE_IP);
-#else
-	tcore_context_set_type(co_context, pdp_type);
+	pdp_type = CONTEXT_TYPE_IP;
+	roam_pdp_type = CONTEXT_TYPE_IP;
 #endif
+	tcore_context_set_type(co_context, pdp_type);
+	tcore_context_set_roam_pdp_type(co_context, roam_pdp_type);
 	tcore_context_set_state(co_context, CONTEXT_STATE_DEACTIVATED);
 	tcore_context_set_role(co_context, svc_ctg_id);
 	tcore_context_set_apn(co_context, apn);
@@ -578,6 +584,12 @@ static gboolean __ps_context_update_profile(ps_context_t *context, GHashTable *p
 				i_tmp = atoi((const char *) value);
 				tcore_context_set_type(co_context, i_tmp);
 			}
+		} else if (g_str_equal(key, "roam_pdp_protocol") == TRUE) {
+			int i_tmp = 0;
+			if (value) {
+				i_tmp = atoi((const char *) value);
+				tcore_context_set_roam_pdp_type(co_context, i_tmp);
+			}
 		} else if (g_str_equal(key, "proxy_addr") == TRUE) {
 			tcore_context_set_proxy(co_context, (const char *) value);
 		} else if (g_str_equal(key, "home_url") == TRUE) {
@@ -682,8 +694,10 @@ static gboolean __ps_context_update_database(ps_context_t *context)
 	g_hash_table_insert(in_param, "8",
 			g_strdup_printf("%d", tcore_context_get_type(context->co_context))); /* PDP protocol */
 	g_hash_table_insert(in_param, "9",
-			g_strdup_printf("%d", _ps_context_get_profile_enable(context))); /* Profile Enable */
+			g_strdup_printf("%d", tcore_context_get_roam_pdp_type(context->co_context))); /* Roam PDP protocol */
 	g_hash_table_insert(in_param, "10",
+			g_strdup_printf("%d", _ps_context_get_profile_enable(context))); /* Profile Enable */
+	g_hash_table_insert(in_param, "11",
 			g_strdup_printf("%d", context->profile_id));						/* Profile ID */
 
 	/* SQL query */
@@ -692,7 +706,7 @@ static gboolean __ps_context_update_database(ps_context_t *context)
 		" update pdp_profile set \
 		 apn = ?, auth_type = ?, auth_id = ?, auth_pwd = ?, \
 		 proxy_ip_addr = ?, home_url = ?, profile_name = ?, \
-		 pdp_protocol = ?, profile_enable = ? where profile_id = ?");
+		 pdp_protocol = ?, roam_pdp_protocol = ?, profile_enable = ? where profile_id = ?");
 
 	rv = tcore_storage_update_query_database(strg_db, handle, szQuery, in_param);
 	ps_dbg_ex_co(co_network, "Update Database: [%s]", (rv == TRUE ? "SUCCESS" : "FAIL"));
@@ -853,7 +867,7 @@ static int __ps_context_insert_profile_to_database(GHashTable *property, int net
 	int profile_id = 0;
 	gchar *profile_name = NULL, *apn = NULL, *auth_type = NULL;
 	gchar *auth_id = NULL, *auth_pwd = NULL, *proxy_addr = NULL;
-	gchar *home_url = NULL, *svc_id = NULL, *pdp_protocol = NULL;
+	gchar *home_url = NULL, *svc_id = NULL, *pdp_protocol = NULL, *roam_pdp_protocol = NULL;
 
 	/* Initialize Storage */
 	if (g_str_has_suffix(cp_name, "1"))
@@ -903,13 +917,21 @@ static int __ps_context_insert_profile_to_database(GHashTable *property, int net
 			FREE_AND_ASSIGN(svc_id, value);
 		} else if (g_str_equal(key, "pdp_protocol") == TRUE) {	/* PDP protocol */
 			FREE_AND_ASSIGN(pdp_protocol, value);
+		} else if (g_str_equal(key, "roam_pdp_protocol") == TRUE) {	/* Roam PDP protocol */
+			FREE_AND_ASSIGN(roam_pdp_protocol, value);
 		}
 	}
 
 	/* Set default PDP protocol */
 	if (pdp_protocol == NULL) {
-		dbg("default pdp_protocol = IPv4");
-		pdp_protocol = g_strdup_printf("%d", CONTEXT_TYPE_IP);
+		dbg("[%s] default pdp_protocol = IPv4v6", cp_name);
+		pdp_protocol = g_strdup_printf("%d", CONTEXT_TYPE_IPV4V6);
+	}
+
+	/* Set default Roam PDP protocol */
+	if (roam_pdp_protocol == NULL) {
+		dbg("[%s] default roam_pdp_protocol = IPv4v6", cp_name);
+		roam_pdp_protocol = g_strdup_printf("%d", CONTEXT_TYPE_IPV4V6);
 	}
 
 	/* Initialize parameters */
@@ -923,26 +945,27 @@ static int __ps_context_insert_profile_to_database(GHashTable *property, int net
 	g_hash_table_insert(in_param, "5", auth_id);		/* Auth ID */
 	g_hash_table_insert(in_param, "6", auth_pwd);		/* Auth Password */
 	g_hash_table_insert(in_param, "7", pdp_protocol);		/* PDP Protocol */
-	g_hash_table_insert(in_param, "8", proxy_addr);		/* Proxy Address */
-	g_hash_table_insert(in_param, "9", home_url);		/* Home URL */
-	g_hash_table_insert(in_param, "10",
+	g_hash_table_insert(in_param, "8", roam_pdp_protocol);		/* Roam PDP Protocol */
+	g_hash_table_insert(in_param, "9", proxy_addr);		/* Proxy Address */
+	g_hash_table_insert(in_param, "10", home_url);		/* Home URL */
+	g_hash_table_insert(in_param, "11",
 			g_strdup_printf("%d", network_id));			/* Network ID */
-	g_hash_table_insert(in_param, "11", svc_id);		/* Service ID */
+	g_hash_table_insert(in_param, "12", svc_id);		/* Service ID */
 
-	dbg("Profile ID: [%d] Profile name: [%s] APN :[%s] Auth Type [%s] Auth ID: [%s] "
-		"Auth Password: [%s] PDP Protocol: [%s] Proxy Address: [%s] Home URL: [%s] Service ID: [%s]",
-		profile_id, profile_name, apn, auth_type, auth_id, auth_pwd, pdp_protocol, proxy_addr, home_url, svc_id);
+	info("[%s] Profile ID: [%d] Profile name: [%s] APN :[%s] Auth Type [%s] Auth ID: [%s] "
+		"Auth Password: [%s] PDP Protocol: [%s] Roam PDP Protocol: [%s] Proxy Address: [%s] Home URL: [%s] Service ID: [%s]",
+		cp_name, profile_id, profile_name, apn, auth_type, auth_id, auth_pwd, pdp_protocol, roam_pdp_protocol, proxy_addr, home_url, svc_id);
 
 	/* SQL Query */
 	memset(szQuery, 0x0, sizeof(szQuery));
 	snprintf(szQuery, sizeof(szQuery), "%s",
 		" insert into pdp_profile(\
 		 profile_id, profile_name, apn, auth_type, auth_id, auth_pwd, \
-		 pdp_protocol, proxy_ip_addr, home_url, linger_time, \
+		 pdp_protocol, roam_pdp_protocol, proxy_ip_addr, home_url, linger_time, \
 		 network_info_id, svc_category_id, hidden, editable, \
 		 default_internet_con, user_defined, is_roaming_apn, profile_enable) values(\
 		 ?, ?, ?, ?, ?, ?, \
-		 ?, ?, ?, 300, \
+		 ?, ?, ?, ?, 300, \
 		 ?, ?, 0, 1, 0, 1, 0, 1)");
 
 	rv = tcore_storage_insert_query_database(strg_db, handle, szQuery, in_param);
@@ -1382,12 +1405,24 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int profile_i
 		g_free(item_key);
 	}
 
+	{/* roam pdp protocol */
+		gchar *roam_pdp_protocol;
+		gchar *item_key = NULL;
+		item_key = g_strdup_printf("connection:roam_pdp_protocol_%d", profile_index);
+		roam_pdp_protocol = iniparser_getstring(dic, item_key, NULL);
+		if (roam_pdp_protocol == NULL)
+			g_hash_table_insert(in_param, "8", g_strdup_printf("%d", CONTEXT_TYPE_IPV4V6));
+		else
+			g_hash_table_insert(in_param, "8", g_strdup(roam_pdp_protocol));
+		g_free(item_key);
+	}
+
 	{/* proxy ip */
 		gchar *proxy_ip_addr;
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:proxy_ip_addr_%d", profile_index);
 		proxy_ip_addr = iniparser_getstring(dic, section_key, NULL);
-		g_hash_table_insert(in_param, "8", g_strdup(proxy_ip_addr));
+		g_hash_table_insert(in_param, "9", g_strdup(proxy_ip_addr));
 		g_free(section_key);
 	}
 
@@ -1396,7 +1431,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int profile_i
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:home_url_%d", profile_index);
 		home_url = iniparser_getstring(dic, section_key, NULL);
-		g_hash_table_insert(in_param, "9", g_strdup(home_url));
+		g_hash_table_insert(in_param, "10", g_strdup(home_url));
 		g_free(section_key);
 	}
 
@@ -1405,7 +1440,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int profile_i
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:linger_time_%d", profile_index);
 		linger_time = iniparser_getstring(dic, section_key, NULL);
-		g_hash_table_insert(in_param, "10", g_strdup(linger_time));
+		g_hash_table_insert(in_param, "11", g_strdup(linger_time));
 		g_free(section_key);
 	}
 
@@ -1414,7 +1449,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int profile_i
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:traffic_class_%d", profile_index);
 		traffic_class = iniparser_getstring(dic, section_key, NULL);
-		g_hash_table_insert(in_param, "11", g_strdup(traffic_class));
+		g_hash_table_insert(in_param, "12", g_strdup(traffic_class));
 		g_free(section_key);
 	}
 
@@ -1423,7 +1458,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int profile_i
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:is_static_ip_addr_%d", profile_index);
 		is_static_ip_addr = iniparser_getstring(dic, section_key, NULL);
-		g_hash_table_insert(in_param, "12", g_strdup(is_static_ip_addr));
+		g_hash_table_insert(in_param, "13", g_strdup(is_static_ip_addr));
 		g_free(section_key);
 	}
 
@@ -1432,7 +1467,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int profile_i
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:ip_addr_%d", profile_index);
 		ip_addr = iniparser_getstring(dic, section_key, NULL);
-		g_hash_table_insert(in_param, "13", g_strdup(ip_addr));
+		g_hash_table_insert(in_param, "14", g_strdup(ip_addr));
 		g_free(section_key);
 	}
 
@@ -1441,7 +1476,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int profile_i
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:is_static_dns_addr_%d", profile_index);
 		is_static_dns_addr = iniparser_getstring(dic, section_key, NULL);
-		g_hash_table_insert(in_param, "14", g_strdup(is_static_dns_addr));
+		g_hash_table_insert(in_param, "15", g_strdup(is_static_dns_addr));
 		g_free(section_key);
 	}
 
@@ -1450,7 +1485,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int profile_i
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:dns_addr1_%d", profile_index);
 		dns_addr1 = iniparser_getstring(dic, section_key, NULL);
-		g_hash_table_insert(in_param, "15", g_strdup(dns_addr1));
+		g_hash_table_insert(in_param, "16", g_strdup(dns_addr1));
 		g_free(section_key);
 	}
 
@@ -1459,7 +1494,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int profile_i
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:dns_addr2_%d", profile_index);
 		dns_addr2 = iniparser_getstring(dic, section_key, NULL);
-		g_hash_table_insert(in_param, "16", g_strdup(dns_addr2));
+		g_hash_table_insert(in_param, "17", g_strdup(dns_addr2));
 		g_free(section_key);
 	}
 
@@ -1468,7 +1503,7 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int profile_i
 		gchar *section_key = NULL;
 		section_key = g_strdup_printf("connection:network_info_id_%d", profile_index);
 		network_info_id = iniparser_getstring(dic, section_key, NULL);
-		g_hash_table_insert(in_param, "17", g_strdup(network_info_id));
+		g_hash_table_insert(in_param, "18", g_strdup(network_info_id));
 		g_free(section_key);
 	}
 
@@ -1478,9 +1513,9 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int profile_i
 		section_key = g_strdup_printf("connection:svc_category_id_%d", profile_index);
 		svc_category_id = iniparser_getstring(dic, section_key, NULL);
 		if (svc_category_id == NULL)
-			g_hash_table_insert(in_param, "18", g_strdup_printf("%d", CONTEXT_ROLE_UNKNOWN));
+			g_hash_table_insert(in_param, "19", g_strdup_printf("%d", CONTEXT_ROLE_UNKNOWN));
 		else
-		g_hash_table_insert(in_param, "18", g_strdup(svc_category_id));
+			g_hash_table_insert(in_param, "19", g_strdup(svc_category_id));
 		g_free(section_key);
 	}
 
@@ -1490,9 +1525,9 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int profile_i
 		section_key = g_strdup_printf("connection:hidden_%d", profile_index);
 		hidden = iniparser_getstring(dic, section_key, NULL);
 		if (hidden == NULL)
-			g_hash_table_insert(in_param, "19", g_strdup_printf("%d", FALSE));
+			g_hash_table_insert(in_param, "20", g_strdup_printf("%d", FALSE));
 		else
-		g_hash_table_insert(in_param, "19", g_strdup(hidden));
+			g_hash_table_insert(in_param, "20", g_strdup(hidden));
 		g_free(section_key);
 	}
 
@@ -1502,9 +1537,9 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int profile_i
 		section_key = g_strdup_printf("connection:editable_%d", profile_index);
 		editable = iniparser_getstring(dic, section_key, NULL);
 		if (editable == NULL)
-			g_hash_table_insert(in_param, "20", g_strdup_printf("%d", TRUE));
+			g_hash_table_insert(in_param, "21", g_strdup_printf("%d", TRUE));
 		else
-		g_hash_table_insert(in_param, "20", g_strdup(editable));
+			g_hash_table_insert(in_param, "21", g_strdup(editable));
 		g_free(section_key);
 	}
 
@@ -1514,9 +1549,9 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int profile_i
 		section_key = g_strdup_printf("connection:default_internet_con_%d", profile_index);
 		default_internet_con = iniparser_getstring(dic, section_key, NULL);
 		if (default_internet_con == NULL)
-			g_hash_table_insert(in_param, "21", g_strdup_printf("%d", FALSE));
+			g_hash_table_insert(in_param, "22", g_strdup_printf("%d", FALSE));
 		else
-		g_hash_table_insert(in_param, "21", g_strdup(default_internet_con));
+			g_hash_table_insert(in_param, "22", g_strdup(default_internet_con));
 		g_free(section_key);
 	}
 
@@ -1526,9 +1561,9 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int profile_i
 		section_key = g_strdup_printf("connection:is_roaming_apn_%d", profile_index);
 		is_roaming_apn = iniparser_getstring(dic, section_key, NULL);
 		if (is_roaming_apn == NULL)
-			g_hash_table_insert(in_param, "22", g_strdup_printf("%d", FALSE));
+			g_hash_table_insert(in_param, "23", g_strdup_printf("%d", FALSE));
 		else
-			g_hash_table_insert(in_param, "22", g_strdup(is_roaming_apn));
+			g_hash_table_insert(in_param, "23", g_strdup(is_roaming_apn));
 		g_free(section_key);
 	}
 
@@ -1540,12 +1575,12 @@ static gboolean __ps_context_insert_profile_tuple(dictionary *dic, int profile_i
 		snprintf(szQuery, sizeof(szQuery), "%s",
 			" insert into pdp_profile(\
 			 profile_id, profile_name, apn, auth_type, auth_id, auth_pwd, \
-			 pdp_protocol, proxy_ip_addr, home_url, linger_time, \
+			 pdp_protocol,  roam_pdp_protocol, proxy_ip_addr, home_url, linger_time, \
 			 traffic_class, is_static_ip_addr, ip_addr, is_static_dns_addr, dns_addr1, dns_addr2, \
 			 network_info_id, svc_category_id, hidden, editable, default_internet_con, \
 			 user_defined, is_roaming_apn, profile_enable) values(\
 			 ?, ?, ?, ?, ?, ?, \
-			 ?, ?, ?, ?, \
+			 ?, ?, ?, ?, ?, \
 			 ?, ?, ?, ?, ?, ?, \
 			 ?, ?, ?, ?, ?, 0, ?, 1)");
 
@@ -1581,7 +1616,7 @@ static int __ps_context_get_network_id(gchar *mccmnc, gchar *cp_name)
 
 GVariant *__ps_context_get_profile_properties(gpointer object, GVariantBuilder *properties)
 {
-	gchar *s_authtype = NULL, *s_role = NULL, *s_type = NULL;
+	gchar *s_authtype = NULL, *s_role = NULL, *s_type = NULL, *s_roam_pdp_type = NULL;
 	ps_context_t *context = NULL;
 	char *apn, *username, *password, *proxy_addr, *home_url, *profile_name;
 
@@ -1595,6 +1630,7 @@ GVariant *__ps_context_get_profile_properties(gpointer object, GVariantBuilder *
 	s_authtype = g_strdup_printf("%d", tcore_context_get_auth(context->co_context));
 	s_role = g_strdup_printf("%d", tcore_context_get_role(context->co_context));
 	s_type = g_strdup_printf("%d", tcore_context_get_type(context->co_context));
+	s_roam_pdp_type = g_strdup_printf("%d", tcore_context_get_roam_pdp_type(context->co_context));
 
 	apn = tcore_context_get_apn(context->co_context);
 	username = tcore_context_get_username(context->co_context);
@@ -1620,6 +1656,9 @@ GVariant *__ps_context_get_profile_properties(gpointer object, GVariantBuilder *
 	if (s_type)
 		g_variant_builder_add(properties, "{ss}", "pdp_protocol", s_type);
 
+	if (s_roam_pdp_type)
+		g_variant_builder_add(properties, "{ss}", "roam_pdp_protocol", s_roam_pdp_type);
+
 	if (proxy_addr)
 		g_variant_builder_add(properties, "{ss}", "proxy_addr", proxy_addr);
 
@@ -1639,6 +1678,7 @@ GVariant *__ps_context_get_profile_properties(gpointer object, GVariantBuilder *
 	g_free(s_authtype);
 	g_free(s_role);
 	g_free(s_type);
+	g_free(s_roam_pdp_type);
 	g_free(apn);
 	g_free(username);
 	g_free(password);
@@ -1705,11 +1745,11 @@ static gpointer __ps_context_add_context(gpointer modem, gchar *mccmnc, int prof
 		 b.proxy_ip_addr, b.home_url, b.pdp_protocol, \
 		 b.linger_time, b.traffic_class, b.is_static_ip_addr, b.ip_addr, \
 		 b.is_static_dns_addr, b.dns_addr1, b.dns_addr2, b.svc_category_id, b.hidden, b.editable, \
-		 b.default_internet_con, b.user_defined, b.is_roaming_apn, b.profile_enable \
+		 b.default_internet_con, b.user_defined, b.is_roaming_apn, b.profile_enable, b.roam_pdp_protocol \
 		 from network_info a, pdp_profile b \
 		 where b.profile_id = ? and a.network_info_id = b.network_info_id ");
 
-	rv = tcore_storage_read_query_database(strg_db, handle, szQuery, in_param, out_param, 26);
+	rv = tcore_storage_read_query_database(strg_db, handle, szQuery, in_param, out_param, 27);
 	ps_dbg_ex_co(co_modem, "Read Database: [%s]", (rv == TRUE ? "SUCCESS" : "FAIL"));
 
 	ps_dbg_ex_co(co_modem, "Create profile by Profile ID: [%d]", profile_id);
@@ -1926,7 +1966,7 @@ GSList* _ps_context_create_hashtable(gpointer modem, gboolean roaming)
 		 b.proxy_ip_addr, b.home_url, b.pdp_protocol, \
 		 b.linger_time, b.traffic_class, b.is_static_ip_addr, b.ip_addr, \
 		 b.is_static_dns_addr, b.dns_addr1, b.dns_addr2, b.svc_category_id, b.hidden, b.editable, \
-		 b.default_internet_con, b.user_defined, b.is_roaming_apn, b.profile_enable \
+		 b.default_internet_con, b.user_defined, b.is_roaming_apn, b.profile_enable, b.roam_pdp_protocol \
 		 from network_info a, pdp_profile b \
 		 where a.mccmnc = ? and b.is_roaming_apn = ? and a.network_info_id = b.network_info_id ");
 
@@ -1935,7 +1975,7 @@ GSList* _ps_context_create_hashtable(gpointer modem, gboolean roaming)
 
 	for (retry = 0; retry < 5; retry++) {
 		ps_dbg_ex_co(co_modem, "Reading database", mdm->operator);
-		rv = tcore_storage_read_query_database_in_order(strg_db, handle, szQuery, in_param, &out_param, 26);
+		rv = tcore_storage_read_query_database_in_order(strg_db, handle, szQuery, in_param, &out_param, 27);
 		if (rv != FALSE)
 			break;
 	}
@@ -2344,6 +2384,7 @@ gboolean _ps_context_set_connected(gpointer object, gboolean enabled)
 	gboolean b_ims_checker = TRUE;
 
 	enum co_context_role role = CONTEXT_ROLE_UNKNOWN;
+	CoreObject *co_network = _ps_service_ref_co_network(_ps_context_ref_service(context));
 
 	dbg("Entry [enabled :%d]", enabled);
 
@@ -2416,6 +2457,10 @@ gboolean _ps_context_set_connected(gpointer object, gboolean enabled)
 			__ps_context_emit_property_changed_signal(context);
 
 	} else {
+		if (context->deact_required == TRUE) {
+			ps_dbg_ex_co(co_network, "set deact_required flag of context(%p) to FALSE", context);
+			context->deact_required = FALSE;
+		}
 		tcore_context_set_state(context->co_context, CONTEXT_STATE_DEACTIVATED);
 		tcore_context_reset_devinfo(context->co_context);
 		__ps_context_emit_property_changed_signal(context);
@@ -3004,12 +3049,6 @@ static gboolean on_context_modify_profile(PacketServiceContext *obj_context,
 
 	ps_dbg_ex_co(co_network, "modify context's profile properties");
 
-	context_state = tcore_context_get_state(context->co_context);
-	if (context_state == CONTEXT_STATE_ACTIVATING) {
-		ps_dbg_ex_co(co_network, "Modify profile in activating state, set deactivate flag.");
-		context->deact_required = TRUE;
-	}
-
 	/*Creating the profile property hash for for internal handling*/
 	/*Create a hash table for the profile property as all fucntion already use ghash table */
 	profile_property = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
@@ -3026,6 +3065,13 @@ static gboolean on_context_modify_profile(PacketServiceContext *obj_context,
 	if (rv != TRUE) {
 		FAIL_RESPONSE(invocation,  PS_ERR_INTERNAL);
 		g_hash_table_destroy(profile_property);
+		return TRUE;
+	}
+
+	context_state = tcore_context_get_state(context->co_context);
+	if (context_state == CONTEXT_STATE_ACTIVATING) {
+		ps_dbg_ex_co(co_network, "Modify profile in activating state, set deactivate flag.");
+		context->deact_required = TRUE;
 		return TRUE;
 	}
 

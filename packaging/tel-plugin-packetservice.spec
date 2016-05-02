@@ -1,6 +1,6 @@
 %define major 0
 %define minor 3
-%define patchlevel 22
+%define patchlevel 23
 
 Name:           tel-plugin-packetservice
 Version:        %{major}.%{minor}.%{patchlevel}
@@ -100,7 +100,7 @@ cp %{SOURCE1} %{buildroot}/etc/dbus-1/system.d/tel-plugin-ps.conf
 
 %files
 %manifest tel-plugin-packetservice.manifest
-%defattr(644,system,system,-)
+%defattr(644,root,root,-)
 #%doc COPYING
 %{_datadir}/ps-plugin/dnet_db.sql
 %{_datadir}/ps-plugin/dnet_db_init.sql
