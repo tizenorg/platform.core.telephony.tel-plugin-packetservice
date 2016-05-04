@@ -1,6 +1,6 @@
 %define major 0
 %define minor 3
-%define patchlevel 24
+%define patchlevel 25
 
 Name:           tel-plugin-packetservice
 Version:        %{major}.%{minor}.%{patchlevel}
@@ -70,24 +70,28 @@ if [ -f %TZ_SYS_DB/.dnet.db ]
 then
 	chmod 660 %TZ_SYS_DB/.dnet.db
 	chown telephony:telephony %TZ_SYS_DB/.dnet.db
+	chsmack -a System %TZ_SYS_DB/.dnet.db
 fi
 
 if [ -f %TZ_SYS_DB/.dnet.db-journal ]
 then
 	chmod 664 %TZ_SYS_DB/.dnet.db-journal
 	chown telephony:telephony %TZ_SYS_DB/.dnet.db-journal
+	chsmack -a System %TZ_SYS_DB/.dnet.db-journal
 fi
 
 if [ -f %TZ_SYS_DB/.dnet2.db ]
 then
 	chmod 660 %TZ_SYS_DB/.dnet2.db
 	chown telephony:telephony %TZ_SYS_DB/.dnet2.db
+	chsmack -a System %TZ_SYS_DB/.dnet2.db
 fi
 
 if [ -f %TZ_SYS_DB/.dnet2.db-journal ]
 then
 	chmod 664 %TZ_SYS_DB/.dnet2.db-journal
 	chown telephony:telephony %TZ_SYS_DB/.dnet2.db-journal
+	chsmack -a System %TZ_SYS_DB/.dnet2.db-journal
 fi
 
 %postun -p /sbin/ldconfig
