@@ -460,11 +460,6 @@ static gboolean __ps_context_create_co_context(gpointer object, GHashTable *prop
 
 	context = (ps_context_t *)object;
 	co_context = tcore_context_new(context->plg, path, NULL);
-#ifdef TIZEN_PS_IPV4_ONLY
-	dbg("pdp type has been changed (%d)", CONTEXT_TYPE_IP);
-	pdp_type = CONTEXT_TYPE_IP;
-	roam_pdp_type = CONTEXT_TYPE_IP;
-#endif
 	tcore_context_set_type(co_context, pdp_type);
 	tcore_context_set_roam_pdp_type(co_context, roam_pdp_type);
 	tcore_context_set_state(co_context, CONTEXT_STATE_DEACTIVATED);
