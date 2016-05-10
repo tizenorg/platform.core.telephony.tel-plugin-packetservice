@@ -1559,7 +1559,7 @@ on_service_get_context(PacketServiceService *obj_service,
 		g_variant_builder_open(&b_context, G_VARIANT_TYPE("{sa{ss}}"));
 		path = _ps_service_ref_path(value);
 
-		g_variant_builder_add(&b_context, "s", g_strdup(path));
+		g_variant_builder_add(&b_context, "s", path);
 		if (FALSE == _ps_context_get_properties_handler(value, &b_context)) {
 			ps_err_ex_co(co_network, "Failed to get property");
 			g_variant_builder_close(&b_context);

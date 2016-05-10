@@ -1078,7 +1078,7 @@ static gboolean on_modem_get_services(PacketServiceModem *obj_modem,
 		g_variant_builder_open(&b_service, G_VARIANT_TYPE("{sa{ss}}"));
 		path = _ps_service_ref_path(value);
 		ps_dbg_ex_co(co_modem, "path added [%s]", path);
-		g_variant_builder_add(&b_service, "s", g_strdup(path));
+		g_variant_builder_add(&b_service, "s", path);
 		if (FALSE == _ps_service_get_properties_handler(value, &b_service)) {
 			g_variant_builder_close(&b_service);
 			FAIL_RESPONSE(invocation, PS_ERR_INTERNAL);

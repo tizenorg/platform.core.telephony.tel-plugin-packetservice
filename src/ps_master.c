@@ -592,13 +592,12 @@ static gboolean on_master_get_modems(PacketServiceMaster *obj_master,
 
 	g_hash_table_iter_init(&iter, master->modems);
 	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
-
 		gchar *path = NULL;
 		path = _ps_modem_ref_path(value);
 		dbg("modem path [%s]", path);
 
 		g_variant_builder_open(&b_modem, G_VARIANT_TYPE("{sa{ss}}"));
-		g_variant_builder_add(&b_modem, "s", g_strdup(path));
+		g_variant_builder_add(&b_modem, "s", path);
 		if (FALSE == _ps_modem_get_properties_handler(value, &b_modem)) {
 			err("Unable to get the modem properties");
 			g_variant_builder_close(&b_modem);
