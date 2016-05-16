@@ -1124,11 +1124,10 @@ static gboolean on_modem_get_profile_list(PacketServiceModem *obj_modem,
 		GDBusMethodInvocation *invocation,
 		gpointer user_data)
 {
-	int profile_index = 0;
-
 	guint len = 0, index;
 	gchar **strv = NULL;
 	GSList *profiles = NULL;
+	GSList *profiles_temp = NULL;
 	ps_modem_t *modem = user_data;
 	CoreObject *co_modem = _ps_modem_ref_co_modem(modem);
 
@@ -1159,19 +1158,21 @@ static gboolean on_modem_get_profile_list(PacketServiceModem *obj_modem,
 	len = g_slist_length(profiles);
 	strv = g_new(gchar *, len+1);
 
-	while (profiles) {
-		strv[profile_index] = g_strdup(profiles->data);
-		profile_index++;
-
-		profiles = profiles->next;
+	/*
+	 * fix memory leak
+	 *  - Shouldn't move profiles GSList position directly
+	 */
+	for (index = 0; index < len; index++) {
+		profiles_temp = g_slist_nth(profiles, index);
+		if(profiles_temp == NULL)
+			continue;
+		strv[index] = g_strdup(profiles_temp->data);
 	}
-	strv[profile_index] = NULL;
-
+	strv[index] = NULL;
 	packet_service_modem_complete_get_profile_list(obj_modem,
 				invocation, (const gchar *const *)strv);
 
 	g_strfreev(strv);
-	profiles = g_slist_nth(profiles, 0);
 	g_slist_free_full(profiles, g_free);
 	dbg("Exiting");
 	return TRUE;
