@@ -784,7 +784,7 @@ static int __ps_context_insert_network_id_to_database(gchar *mccmnc, gchar *cp_n
 	 * if NONE exists, then 'Network ID' would be equal to 1
 	 * else if there exists a valid maximum entry; 'Network ID' would be incremented value.
 	 */
-	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
 				(GDestroyNotify) g_hash_table_destroy);
 
 	/* SQL query */
@@ -932,20 +932,18 @@ static int __ps_context_insert_profile_to_database(GHashTable *property, int net
 	/* Initialize parameters */
 	in_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
 
-	g_hash_table_insert(in_param, "1",
-			g_strdup_printf("%d", profile_id));			/* Profile ID */
-	g_hash_table_insert(in_param, "2", profile_name);	/* Profile Name */
-	g_hash_table_insert(in_param, "3", apn);			/* APN */
-	g_hash_table_insert(in_param, "4", auth_type);		/* Auth Type */
-	g_hash_table_insert(in_param, "5", auth_id);		/* Auth ID */
-	g_hash_table_insert(in_param, "6", auth_pwd);		/* Auth Password */
-	g_hash_table_insert(in_param, "7", pdp_protocol);		/* PDP Protocol */
-	g_hash_table_insert(in_param, "8", roam_pdp_protocol);		/* Roam PDP Protocol */
-	g_hash_table_insert(in_param, "9", proxy_addr);		/* Proxy Address */
-	g_hash_table_insert(in_param, "10", home_url);		/* Home URL */
-	g_hash_table_insert(in_param, "11",
-			g_strdup_printf("%d", network_id));			/* Network ID */
-	g_hash_table_insert(in_param, "12", svc_id);		/* Service ID */
+	g_hash_table_insert(in_param, "1", g_strdup_printf("%d", profile_id));	/* Profile ID */
+	g_hash_table_insert(in_param, "2", g_strdup(profile_name));	/* Profile Name */
+	g_hash_table_insert(in_param, "3", g_strdup(apn));			/* APN */
+	g_hash_table_insert(in_param, "4", g_strdup(auth_type));	/* Auth Type */
+	g_hash_table_insert(in_param, "5", g_strdup(auth_id));		/* Auth ID */
+	g_hash_table_insert(in_param, "6", g_strdup(auth_pwd));		/* Auth Password */
+	g_hash_table_insert(in_param, "7", g_strdup(pdp_protocol));	/* PDP Protocol */
+	g_hash_table_insert(in_param, "8", g_strdup(roam_pdp_protocol));	/* Roam PDP Protocol */
+	g_hash_table_insert(in_param, "9", g_strdup(proxy_addr));		/* Proxy Address */
+	g_hash_table_insert(in_param, "10", g_strdup(home_url));		/* Home URL */
+	g_hash_table_insert(in_param, "11", g_strdup_printf("%d", network_id));		/* Network ID */
+	g_hash_table_insert(in_param, "12", g_strdup(svc_id));		/* Service ID */
 
 	info("[%s] Profile ID: [%d] Profile name: [%s] APN :[%s] Auth Type [%s] Auth ID: [%s] "
 		"Auth Password: [%s] PDP Protocol: [%s] Roam PDP Protocol: [%s] Proxy Address: [%s] Home URL: [%s] Service ID: [%s]",
@@ -1014,7 +1012,7 @@ static int __ps_context_load_network_id_from_database(gchar *mccmnc, gchar *cp_n
 	in_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
 	g_hash_table_insert(in_param, "1", g_strdup(mccmnc));
 
-	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
 			(GDestroyNotify) g_hash_table_destroy);
 
 	/* SQL Query */
@@ -1082,7 +1080,7 @@ static gchar *__ps_context_load_network_name_from_database(int network_id, gchar
 	in_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
 	g_hash_table_insert(in_param, "1", g_strdup_printf("%d", network_id));
 
-	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
 						(GDestroyNotify)g_hash_table_destroy);
 
 	/* SQL query */
@@ -1145,7 +1143,7 @@ static int __ps_context_load_profile_id_from_database(gchar *cp_name)
 	}
 
 	/* Initialize parameters */
-	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
 			(GDestroyNotify) g_hash_table_destroy);
 
 	/* SQL query */
@@ -1212,7 +1210,7 @@ static int __ps_context_load_num_of_pdn_from_database(gchar *mccmnc, gchar *cp_n
 	in_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
 	g_hash_table_insert(in_param, "1", g_strdup(mccmnc));
 
-	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
 			(GDestroyNotify) g_hash_table_destroy);
 
 	/* SQL query */
@@ -1736,7 +1734,7 @@ static gpointer __ps_context_add_context(gpointer modem, gchar *mccmnc, int prof
 	in_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
 	g_hash_table_insert(in_param, "1", g_strdup_printf("%d", profile_id));
 
-	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
 			(GDestroyNotify) g_hash_table_destroy);
 
 	/* SQL query */
@@ -1808,7 +1806,7 @@ gboolean _ps_context_check_is_roaming_apn_support(gchar* mccmnc, gchar* cp_name)
 	in_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
 	g_hash_table_insert(in_param, "1", g_strdup_printf("%d", network_info_id));
 
-	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+	out_param = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
 			(GDestroyNotify) g_hash_table_destroy);
 
 	/* SQL query */
