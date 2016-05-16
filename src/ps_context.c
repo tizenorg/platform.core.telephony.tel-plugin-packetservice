@@ -970,8 +970,17 @@ static int __ps_context_insert_profile_to_database(GHashTable *property, int net
 	}
 
 	/* Free resources */
+	g_free(profile_name);
+	g_free(apn);
+	g_free(auth_type);
+	g_free(auth_id);
+	g_free(auth_pwd);
+	g_free(proxy_addr);
+	g_free(home_url);
+	g_free(svc_id);
+	g_free(pdp_protocol);
+	g_free(roam_pdp_protocol);
 	g_hash_table_destroy(in_param);
-
 EXIT:
 	/* De-initialize Storage */
 	tcore_storage_remove_handle(strg_db, handle);
