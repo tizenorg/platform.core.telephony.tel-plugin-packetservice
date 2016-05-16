@@ -152,6 +152,7 @@ gboolean ps_main_init(TcorePlugin *p)
 	dbg("PacketService - dBus address: [%s] dBus connection ID: [%d]",
 		address, id);
 
+	g_free(address);
 	/*
 	 * Initializing custom data for Packet Service
 	 */
