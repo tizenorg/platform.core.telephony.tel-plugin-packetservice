@@ -3053,7 +3053,7 @@ static gboolean on_context_modify_profile(PacketServiceContext *obj_context,
 
 	/*Creating the profile property hash for for internal handling*/
 	/*Create a hash table for the profile property as all fucntion already use ghash table */
-	profile_property = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+	profile_property = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 	g_variant_iter_init(&g_iter, property);
 	while (g_variant_iter_next(&g_iter, "{ss}", &g_key, &g_value)) {
 

@@ -1,6 +1,6 @@
 %define major 0
 %define minor 3
-%define patchlevel 28
+%define patchlevel 29
 
 Name:           tel-plugin-packetservice
 Version:        %{major}.%{minor}.%{patchlevel}

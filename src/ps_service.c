@@ -1220,12 +1220,16 @@ gboolean _ps_service_set_connected(gpointer object, gpointer cstatus, gboolean e
 
 		if (!enabled) {
 			gchar *ipv4 = NULL;
+			gchar *devname = NULL;
 
 			ps_dbg_ex_co(co_network, "Reset socket connections.");
 
 			tcore_ps_clear_context_id(service->co_ps, context);
 			ipv4 = tcore_context_get_ipv4_addr(context);
-			tcore_util_reset_ipv4_socket(tcore_context_get_ipv4_devname(context), (const char *)ipv4);
+			devname = tcore_context_get_ipv4_devname(context);
+			tcore_util_reset_ipv4_socket((const char *)devname, (const char *)ipv4);
+			free(ipv4);
+			g_free(devname);
 		}
 
 		_ps_context_set_connected(value, enabled);
